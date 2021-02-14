@@ -2,8 +2,10 @@ import numpy as np
 import pandas as pd
 import copy
 import time
+import random
 import pickle
 import tqdm as tqdm
+import itertools
 import multiprocessing as mp
 from sklearn_utils import collapse_concat
 from functools import partial, reduce
@@ -15,16 +17,6 @@ from colorama import Style
 
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
-
-# TODO Work out how to handle the seed sequence. Should it be removed or not?
-# TODO Add functionality to export protein landscape graph to cytoscape
-# TODO Need to make all data acquisition schemes utilize the same syntax which allows you to manually specify a data array
-
-# The code has two fundamental subcomponents:
-#   The ability to slice the data
-#   The ability to return the data in useful objects to you.
-
-# The goal should be to standardize these two with similar call signatures across the two of them.
 
 class Protein_Landscape():
     """
@@ -144,7 +136,7 @@ class Protein_Landscape():
         The floating point ruggedness of the landscape calculated as the normalized
         number of maxima and minima.
 
-    Written by Adam Mater, last revision 04-09-20
+    Written by Adam Mater, last revision 14.2.21
     """
 
     def __init__(self,data=None,
@@ -215,18 +207,7 @@ class Protein_Landscape():
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
         self.mutation_arrays  = self.gen_mutation_arrays()
 
-        subsets = {x : [] for x in range(seq_len+1)}
-
-        self.hammings = self.hamming_array()
-
-        for distance in range(seq_len+1):
-            subsets[distance] = np.equal(distance,self.hammings) # Stores an indexing array that isolates only sequences with that Hamming distance
-
-        subsets = {k : v for k,v in subsets.items() if v.any()}
-
-        self.max_distance = max(subsets.keys())
-
-        self.d_data = subsets
+        self.d_data = self.gen_d_data()
 
         if self.gen_graph is False:
             self.graph = None
@@ -304,6 +285,23 @@ class Protein_Landscape():
         else:
             return self.data[self.d_data[d]]
 
+    def gen_d_data(self,seq=None):
+        if seq is None:
+            seq = self.seed()
+
+        subsets = {x : [] for x in range(len(seq)+1)}
+
+        self.hammings = self.hamming_array(seq=seq)
+
+        for distance in range(len(seq)+1):
+            subsets[distance] = np.equal(distance,self.hammings)
+            # Stores an indexing array that isolates only sequences with that Hamming distance
+
+        subsets = {k : v for k,v in subsets.items() if v.any()}
+        self.max_distance = max(subsets.keys())
+        return subsets
+
+
     def get_mutated_positions(self,positions,tokenize=False):
         """
         Function that returns the portion of the data only where the provided positions
@@ -358,7 +356,7 @@ class Protein_Landscape():
         if seq is None:
             tokenized_seq = np.array(self.tokenize(self.seed_seq))
         else:
-            tokenized_seq = seq
+            tokenized_seq = np.array(self.tokenize(seq))
 
         if data is None:
             data = self.tokenized[:,:-1]
@@ -948,14 +946,78 @@ class Protein_Landscape():
         return self.gen_dataloaders(labels=labels, keys=keys, params=params, split_point=split_point)
 
     def shotgun_data(self,num_samples=1000):
+        """
+        Shotgun data randomly samples the entirety of the dataset
+
+        Parameters
+        ----------
+        num_samples : int, default=1000
+
+            Determines how many datapoints will be sampled
+        """
         idxs = np.random.choice(len(self), size=(num_samples,))
-        return self.data[idxs]
+        return idxs
 
-    def trajectory_data(self):
-        pass
+    def trajectory_data(self,initial_seq=None,num_samples=1000):
+        """
+        Trajectory data takes an initial sequence and then generates a random
+        walk through the computer graph of the protein landscape.
 
-    def deep_sequence_data(self):
-        pass
+        IMPORTANT : It is allowed to sample the same position multiple times,
+        with duplicate entries being removed before the indices are returned.
+
+        Parameters
+        ----------
+        initial_seq : str, default=None
+
+            The initial sequence from which the random walk will begin. If none,
+            will use the seed sequence of the dataset.
+
+        num_samples : int, default=1000
+
+            The number of steps that the algorithm is allowed to take through the
+            graph
+
+        Returns
+        -------
+        idxs : np.array
+
+            A numpy array of all indexes, which can be passed to the data stores
+        """
+        if initial_seq is None:
+            initial_seq = tuple(self.tokenize(self.seed_seq))
+        idxs = []
+        for i in range(num_samples):
+            idx = random.choice(self.graph[initial_seq])
+            idxs.append(idx)
+            initial_seq = tuple(self.tokenized[idx,:-1]) # Choose the new sequence
+        return np.unique(np.array(idxs))
+
+    def deep_sequence_data(self,initial_seq=None,max_distance=1):
+        """
+        Uses the gen_d_data function to provide all sequences a certain hamming
+        distance away
+
+        Parameters
+        ----------
+        initial_seq : str, default=None
+
+            The initial sequence from which the random walk will begin. If none,
+            will use the seed sequence of the dataset.
+
+        max_distance : int, default=1
+
+            The maximum hamming distance from the central sequence that the data
+            will be extracted from.
+        """
+        if initial_seq is None:
+            initial_seq = tuple(self.tokenize(self.seed_seq))
+            d_data      = self.d_data
+        else:
+            d_data      = self.gen_d_data(seq=seq)
+
+        idxs = reduce(np.add,[d_data[d] for d in range(1,max_distance+1)])
+        return idxs
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
