@@ -5,7 +5,6 @@ import time
 import random
 import pickle
 import tqdm as tqdm
-import itertools
 import networkx as nx
 import multiprocessing as mp
 from sklearn_utils import collapse_concat
@@ -331,7 +330,21 @@ class Protein_Landscape():
         else:
             return self.data[self.d_data[d]]
 
-    def gen_d_data(self,seq=None):
+    def gen_d_data(self,seq=None) -> dict:
+        """
+        Generates a dictionary of possible distances from a sequence and then
+        populates it with boolean indexing arrays for each distance
+
+        IMPORTANT Boolean indexing arrays are used here instead of arrays of integer
+        indexes because it is simpler to manipulate groups of them and bitwise
+        operations become available.
+
+        Parameters
+        ----------
+        seq : str, int, tuple
+
+            A protein sequence provided in any one of the formats that query can parse.
+        """
         if seq is None:
             seq = self.seed()
 
@@ -349,7 +362,6 @@ class Protein_Landscape():
         subsets = {k : v for k,v in subsets.items() if v.any()}
         self.max_distance = max(subsets.keys())
         return subsets
-
 
     def get_mutated_positions(self,positions,tokenize=False):
         """
@@ -492,100 +504,6 @@ class Protein_Landscape():
                 strs.append("{0}".format(char))
         return "".join(strs)
 
-    def tokenize_data(self):
-        """
-        Takes an iterable of sequences provided as one amino acid strings and returns
-        an array of their tokenized form.
-
-        Note : The tokenize function is not called and the tokens value is regenerated
-        as it removes a lot of function calls and speeds up the operation significantly.
-        """
-        tokens = self.tokens
-        return np.array([[tokens[aa] for aa in seq] for seq in self.sequences])
-
-    def get_data(self,tokenized=False):
-        """
-        Simple function that returns a copy of the data stored in the class.
-
-        Parameters
-        ----------
-        tokenized : Bool, default=False
-
-            Boolean value that determines if the raw or tokenized data will be returned.
-        """
-        if tokenized:
-            return copy.copy(self.data)
-        else:
-            return copy.copy(self.tokenized)
-
-
-    def sklearn_data(self, data=None,distance=None,positions=None,split=0.8,shuffle=True):
-        """
-        Parameters
-        ----------
-        data : np.array(NxM+1), default=None
-
-            Optional data array that will be split. Added to the function to enable it
-            to interface with lengthen sequences.
-
-            Provided array is expected to be (NxM+1) where N is the number of data points,
-            M is the sequence length, and the +1 captures the extra column for the fitnesses
-
-        distance : int or [int], default=None
-
-            The specific distance (or distances) from the seed sequence that the data should be sampled from.
-
-        positions : [int], default=None
-
-            The specific mutant positions that the data will be sampled from
-
-        split : float, default=0.8, range [0-1]
-
-            The split point for the training - validation data.
-
-        shuffle : Bool, default=True
-
-            Determines if the data will be shuffled prior to returning.
-
-        returns : x_train, y_train, x_test, y_test
-
-            All Nx1 arrays with train as the first 80% of the shuffled data and test
-            as the latter 20% of the shuffled data.
-        """
-
-        assert (0 <= split <= 1), "Split must be between 0 and 1"
-
-        if data is not None:
-            data = data
-        elif distance:
-            if type(distance) == int:
-                data = copy.copy(self.get_distance(distance,tokenize=True))
-            else:
-                data = collapse_concat([copy.copy(self.get_distance(d,tokenize=True)) for d in distance])
-
-        elif positions is not None:
-            data = copy.copy(self.get_mutated_positions(positions,tokenize=True))
-        else:
-            data = copy.copy(self.tokenized)
-
-        if shuffle:
-            np.random.shuffle(data)
-
-        split_point = int(len(data)*split)
-
-        train = data[:split_point]
-        test  = data[split_point:]
-
-        # Y data selects only the last column of Data
-        # X selects the rest
-
-        x_train = train[:,:-1]
-        y_train = train[:,-1]
-        x_test  = test[:,:-1]
-        y_test  = test[:,-1]
-
-        return x_train.astype("int"), y_train.astype("float"), \
-               x_test.astype("int"), y_test.astype("float")
 
     def gen_mutation_arrays(self):
         leng = len(self.seed())
@@ -739,6 +657,10 @@ class Protein_Landscape():
         copies = np.invert(np.all(hold_array == seq,axis=1))
         return hold_array[copies]
 
+    ############################################################################
+    ##################### Graph Generation and Manipulation ####################
+    ############################################################################
+
     def calc_neighbours(self,idx,token_dict=None):
         """
         Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
@@ -763,31 +685,6 @@ class Protein_Landscape():
         possible_neighbours = self.generate_mutations(self.tokenized[idx,:-1])
         actual_neighbours = [token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict]
         return idx, actual_neighbours
-
-    def calculate_num_extrema(self,idxs=None):
-        """
-        Calcaultes the number of maxima across a given dataset or array of indices
-        """
-        if idxs is None:
-            idxs = range(len(self))
-            graph = self.graph
-        else:
-            graph = self.build_graph(idxs=idxs)
-            idxs = np.where(idxs)[0]
-
-        print("Calculating the number of extrema")
-        mapfunc = partial(self.is_extrema, graph=graph)
-        results = np.array(list(map(mapfunc,tqdm.tqdm(idxs))))
-        minima = -1*np.sum(results[results<0])
-        maxima = np.sum(results[results>0])
-        return minima, maxima
-
-    def calc_extrema_ruggedness(self):
-        """
-        Simple function that returns a normalized ruggedness value
-        """
-        ruggedness = (self.num_minima+self.num_maxima)/len(self)
-        return ruggedness
 
     # Graph Section
     def build_graph(self,idxs=None):
@@ -823,6 +720,35 @@ class Protein_Landscape():
                                     "fitness"       : self.fitnesses[idx],
                                     "neighbours"  : neighbours} for idx, neighbours in results}
         return neighbours
+
+    ############################################################################
+    ######################## Ruggedness Estimation #############################
+    ############################################################################
+
+    def calculate_num_extrema(self,idxs=None):
+        """
+        Calcaultes the number of maxima across a given dataset or array of indices
+        """
+        if idxs is None:
+            idxs = range(len(self))
+            graph = self.graph
+        else:
+            graph = self.build_graph(idxs=idxs)
+            idxs = np.where(idxs)[0]
+
+        print("Calculating the number of extrema")
+        mapfunc = partial(self.is_extrema, graph=graph)
+        results = np.array(list(map(mapfunc,tqdm.tqdm(idxs))))
+        minima = -1*np.sum(results[results<0])
+        maxima = np.sum(results[results>0])
+        return minima, maxima
+
+    def calc_extrema_ruggedness(self):
+        """
+        Simple function that returns a normalized ruggedness value
+        """
+        ruggedness = (self.num_minima+self.num_maxima)/len(self)
+        return ruggedness
 
     def extrema_ruggedness_subset(self,idxs):
         """
@@ -897,6 +823,106 @@ class Protein_Landscape():
         rmse_predictions = np.sqrt(mean_squared_error(y_train, y_preds))
         slope = (1/len(self.seed_seq)*sum([abs(i) for i in coefs]))
         return [slope, rmse_predictions, rmse_predictions/slope]
+
+    ############################################################################
+    ################### Data Manipulation and Slicing ##########################
+    ############################################################################
+
+
+    def get_data(self,tokenized=False):
+        """
+        Simple function that returns a copy of the data stored in the class.
+
+        Parameters
+        ----------
+        tokenized : Bool, default=False
+
+            Boolean value that determines if the raw or tokenized data will be returned.
+        """
+        if tokenized:
+            return copy.copy(self.data)
+        else:
+            return copy.copy(self.tokenized)
+
+
+    def tokenize_data(self):
+        """
+        Takes an iterable of sequences provided as one amino acid strings and returns
+        an array of their tokenized form.
+
+        Note : The tokenize function is not called and the tokens value is regenerated
+        as it removes a lot of function calls and speeds up the operation significantly.
+        """
+        tokens = self.tokens
+        return np.array([[tokens[aa] for aa in seq] for seq in self.sequences])
+
+    def sklearn_data(self, data=None,distance=None,positions=None,split=0.8,shuffle=True):
+        """
+        Parameters
+        ----------
+        data : np.array(NxM+1), default=None
+
+            Optional data array that will be split. Added to the function to enable it
+            to interface with lengthen sequences.
+
+            Provided array is expected to be (NxM+1) where N is the number of data points,
+            M is the sequence length, and the +1 captures the extra column for the fitnesses
+
+        distance : int or [int], default=None
+
+            The specific distance (or distances) from the seed sequence that the data should be sampled from.
+
+        positions : [int], default=None
+
+            The specific mutant positions that the data will be sampled from
+
+        split : float, default=0.8, range [0-1]
+
+            The split point for the training - validation data.
+
+        shuffle : Bool, default=True
+
+            Determines if the data will be shuffled prior to returning.
+
+        returns : x_train, y_train, x_test, y_test
+
+            All Nx1 arrays with train as the first 80% of the shuffled data and test
+            as the latter 20% of the shuffled data.
+        """
+
+        assert (0 <= split <= 1), "Split must be between 0 and 1"
+
+        if data is not None:
+            data = data
+        elif distance:
+            if type(distance) == int:
+                data = copy.copy(self.get_distance(distance,tokenize=True))
+            else:
+                data = collapse_concat([copy.copy(self.get_distance(d,tokenize=True)) for d in distance])
+
+        elif positions is not None:
+            data = copy.copy(self.get_mutated_positions(positions,tokenize=True))
+        else:
+            data = copy.copy(self.tokenized)
+
+        if shuffle:
+            np.random.shuffle(data)
+
+        split_point = int(len(data)*split)
+
+        train = data[:split_point]
+        test  = data[split_point:]
+
+        # Y data selects only the last column of Data
+        # X selects the rest
+
+        x_train = train[:,:-1]
+        y_train = train[:,-1]
+        x_test  = test[:,:-1]
+        y_test  = test[:,-1]
+
+        return x_train.astype("int"), y_train.astype("float"), \
+               x_test.astype("int"), y_test.astype("float")
 
     def gen_dataloaders(self,labels,keys,params,split_point):
         """
@@ -1118,6 +1144,8 @@ class Protein_Landscape():
 
         idxs = reduce(np.add,[d_data[d] for d in range(1,max_distance+1)])
         return idxs
+
+
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
