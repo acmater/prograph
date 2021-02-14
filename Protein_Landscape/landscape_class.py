@@ -264,7 +264,7 @@ class Protein_Landscape():
         return len(self.sequences)
 
     def __getitem__(self,idx):
-        return self.data[idx]
+        return self.data[self.query(idx,information=False)]
 
     def query(self,sequence,information=True) -> int:
         """
@@ -272,8 +272,6 @@ class Protein_Landscape():
         This object works by moving indexes of sequences around due to the large increase
         in computational efficiency, and as a result this function returns the index associated
         with this sequence
-
-        # Should this be used instead of __getitem__?
 
         Parameters
         ----------
@@ -1036,6 +1034,7 @@ class Protein_Landscape():
         """
         if idxs is not None:
             pass
+
         if distance:
             if type(distance) == int:
                 data = self.get_distance(distance,tokenize=True)
