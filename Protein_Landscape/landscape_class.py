@@ -310,7 +310,7 @@ class Protein_Landscape():
         else:
             return idx
 
-    def get_distance(self,d,tokenize=False):
+    def get_distance(self,d,d_data=None,tokenize=False):
         """ Returns all arrays at a fixed distance from the seed string
 
         Parameters
@@ -319,16 +319,24 @@ class Protein_Landscape():
 
             The distance that you want extracted
 
+        d_data : dict, default=None
+
+            A custom d_data dictionary can be provided. If none is provided, self.d_data
+            is used.
+
         tokenize : Bool, False
 
             Whether or not the returned data will be in tokenized form or not.
         """
-        assert d in self.d_data.keys(), "Not a valid distance for this dataset"
+        if d_data is None:
+            d_data = self.d_data
+
+        assert d in d_data.keys(), "Not a valid distance for this dataset"
 
         if tokenize:
-            return self.tokenized[self.d_data[d]]
+            return self.tokenized[d_data[d]]
         else:
-            return self.data[self.d_data[d]]
+            return self.data[d_data[d]]
 
     def gen_d_data(self,seq=None) -> dict:
         """
@@ -359,9 +367,9 @@ class Protein_Landscape():
             subsets[distance] = np.equal(distance,self.hammings)
             # Stores an indexing array that isolates only sequences with that Hamming distance
 
-        subsets = {k : v for k,v in subsets.items() if v.any()}
-        self.max_distance = max(subsets.keys())
-        return subsets
+        d_data = {k : v for k,v in subsets.items() if v.any()}
+        self.max_distance = max(d_data.keys())
+        return d_data
 
     def get_mutated_positions(self,positions,tokenize=False):
         """
@@ -978,6 +986,7 @@ class Protein_Landscape():
     def pytorch_dataloaders(self,
                             tokenize=True,
                             split_point=0.8,
+                            idxs=None,
                             distance=False,
                             positions=None,
                             params={"batch_size"  : 500,
@@ -998,6 +1007,10 @@ class Protein_Landscape():
         split_point : float, default=0.8, 0 <= split_point <= 1
 
             Determines what fraction of data goes into training and test dataloaders
+
+        idxs : np.array[int], default=None
+
+            Indexes which will be used to create a subset of the data before the other operations are applied.
 
         distance : int or [int], default=False
 
@@ -1021,6 +1034,8 @@ class Protein_Landscape():
             Value used to assign ground truth status for algorithms such as GANs. 0 is the default
             to enable better gradient movement
         """
+        if idxs is not None:
+            pass
         if distance:
             if type(distance) == int:
                 data = self.get_distance(distance,tokenize=True)
@@ -1180,8 +1195,6 @@ class Protein_Landscape():
 
         idxs = reduce(np.add,[d_data[d] for d in range(1,max_distance+1)])
         return idxs
-
-
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
