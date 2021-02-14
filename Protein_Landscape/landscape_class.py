@@ -773,7 +773,7 @@ class Protein_Landscape():
         results = pool.map(mapfunc,tqdm.tqdm(range(len(self))))
         neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
                                     "string"      : self.sequences[idx],
-                                    "label"       : self.fitnesses[idx],
+                                    "fitness"       : self.fitnesses[idx],
                                     "neighbours"  : neighbours} for idx, neighbours in results}
         return neighbours
 
@@ -1008,6 +1008,48 @@ class Protein_Landscape():
     def mc_criterion(state1, state2, T):
         preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state1) * T)))
         return np.array([1-preference_for_state2, preference_for_state2]).reshape(-1,)
+
+    def query(self,sequence,information=True):
+        """
+        Helper function that interprets a query sequence and accepts multiple formats.
+        This object works by moving indexes of sequences around due to the large increase
+        in computational efficiency, and as a result this function returns the index associated
+        with this sequence
+
+        Parameters
+        ----------
+        sequence : str, tuple, int
+
+            The sequence to query against the dataset. Multiple valid input formats
+
+        information : Bool, default=True
+
+            Whether or not to return the information rich form of the protein, i.e
+            its multiple representations, label, and neighbours (leverages the graph object)
+        """
+        if sequence is not None:
+            if type(sequence) == str:
+                assert sequence in self.sequences,"This sequence is not in the dataset"
+                idx = int(np.where(self.sequences == sequence)[0])
+
+            elif type(sequence) == tuple:
+                assert len(sequence) == len(self.seed()), "Tuple not valid length for dataset"
+                check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
+                assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
+                idx = int(check)
+
+            elif type(sequence) == int:
+                assert sequence in range(len(self)), "Index exceeds bounds of dataset"
+                idx = sequence
+
+            else:
+                raise ValueError("Input format not understood")
+
+        if information:
+            assert self.graph is not None, "To provide this information, the graph must be computed"
+            return self.graph[idx]
+        else:
+            return idx
 
     def evolved_trajectory_data(self,initial_seq=None,
                                      num_steps=1000,
