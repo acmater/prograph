@@ -308,12 +308,12 @@ class Protein_Landscape():
         else:
             return idx
 
-    def get_distance(self,d,d_data=None,tokenize=False):
+    def get_distance(self,dist,d_data=None,tokenize=False):
         """ Returns all arrays at a fixed distance from the seed string
 
         Parameters
         ----------
-        d : int
+        dist : int
 
             The distance that you want extracted
 
@@ -329,12 +329,12 @@ class Protein_Landscape():
         if d_data is None:
             d_data = self.d_data
 
-        assert d in d_data.keys(), "Not a valid distance for this dataset"
+        assert dist in d_data.keys(), "Not a valid distance for this dataset"
 
         if tokenize:
-            return self.tokenized[d_data[d]]
+            return self.tokenized[d_data[dist]]
         else:
-            return self.data[d_data[d]]
+            return self.data[d_data[dist]]
 
     def gen_d_data(self,seq=None) -> dict:
         """

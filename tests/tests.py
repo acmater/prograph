@@ -1,0 +1,3 @@
+import unittest
+
+from Protein_Landscape.landscape_class import Protein_Landscape
