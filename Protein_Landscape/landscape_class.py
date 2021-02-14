@@ -659,7 +659,7 @@ class Protein_Landscape():
         if graph is None:
             graph = self.graph
 
-        neighbours = graph[tuple(self.tokenized[idx,:-1])]["neighbours"]
+        neighbours = graph[idx]["neighbours"]
         #print(self.fitnesses[neighbours])
         max_comparisons = np.greater(self.fitnesses[idx],self.fitnesses[neighbours])
         min_comparisons = np.less(self.fitnesses[idx],self.fitnesses[neighbours])
@@ -691,7 +691,7 @@ class Protein_Landscape():
         copies = np.invert(np.all(hold_array == seq,axis=1))
         return hold_array[copies]
 
-    def calc_neighbours(self,seq,idx,token_dict=None):
+    def calc_neighbours(self,idx,token_dict=None):
         """
         Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
 
@@ -709,15 +709,12 @@ class Protein_Landscape():
 
             Tokenized sequence array
         """
-        if idx is None:
-            idx = np.where(np.all(seq == self.tokenized[:,:-1],axis=1))
-
         if token_dict is None:
             token_dict = self.token_dict
 
-        possible_neighbours = self.generate_mutations(seq)
+        possible_neighbours = self.generate_mutations(self.tokenized[idx,:-1])
         actual_neighbours = [token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict]
-        return seq, idx, actual_neighbours
+        return idx, actual_neighbours
 
     def calculate_num_extrema(self,idxs=None):
         """
@@ -758,11 +755,10 @@ class Protein_Landscape():
         """
         if idxs is None:
             print("Building Protein Graph for entire dataset")
-            dataset = self.tokenized[:,:-1]
             token_dict = self.token_dict
             pool = mp.Pool(mp.cpu_count())
 
-        else:
+        else: # Check to see if this still works
             print("Building Protein Graph For subset of length {}".format(sum(idxs)))
             dataset = self.tokenized[:,:-1][idxs]
             integer_indexes = np.where(idxs)[0]
@@ -773,9 +769,11 @@ class Protein_Landscape():
                 pool = mp.Pool(mp.cpu_count())
 
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict)
-        results = pool.starmap(mapfunc,tqdm.tqdm(list(zip(dataset,itertools.count()))))
-        neighbours = {tuple(seq) : {"idx" : idx,
-                                    "neighbours" : neighbours} for seq, idx, neighbours in results}
+        results = pool.map(mapfunc,tqdm.tqdm(range(len(self))))
+        neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
+                                    "string"      : self.sequences[idx],
+                                    "label"       : self.fitnesses[idx],
+                                    "neighbours"  : neighbours} for idx, neighbours in results}
         return neighbours
 
     def extrema_ruggedness_subset(self,idxs):
@@ -998,7 +996,7 @@ class Protein_Landscape():
             A numpy array of all indexes, which can be passed to the data stores
         """
         if initial_seq is None:
-            initial_seq = tuple(self.tokenize(self.seed_seq))
+            initial_seq = self.seed_id
         idxs = []
         for i in range(num_samples):
             idx = random.choice(self.graph[initial_seq])
