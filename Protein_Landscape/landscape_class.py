@@ -18,6 +18,13 @@ from sklearn.linear_model import LinearRegression
 
 # TODO Work out how to handle the seed sequence. Should it be removed or not?
 # TODO Add functionality to export protein landscape graph to cytoscape
+# TODO Need to make all data acquisition schemes utilize the same syntax which allows you to manually specify a data array
+
+# The code has two fundamental subcomponents:
+#   The ability to slice the data
+#   The ability to return the data in useful objects to you.
+
+# The goal should be to standardize these two with similar call signatures across the two of them.
 
 class Protein_Landscape():
     """
