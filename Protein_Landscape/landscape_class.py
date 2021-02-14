@@ -721,6 +721,22 @@ class Protein_Landscape():
                                     "neighbours"  : neighbours} for idx, neighbours in results}
         return neighbours
 
+    def graph_to_networkx(self):
+        """
+        Produces a networkx graph from the internally stored graph object
+        """
+        # So the problem here is that I do not know how to stick labels on with the
+        # nodes. As a result, cytoscape won't be able to visualize the graphs properly.
+        g = nx.Graph()
+        for idx in range(len(self)):
+            g.add_nodes_from(self.sequences[idx])#,attr_dict={"fitness" : self.fitnesses[idx]})
+        for node in tqdm.tqdm(self.sequences):
+            # I could just shift this to an enumerate operation, I just want to be absolute
+            # positive that there is no strange changes to the ordering.
+            idx = int(np.where(self.sequences == node)[0])
+            g.add_edges_from([(node, self.sequences[neighbour_idx]) for neighbour_idx in self.graph[idx]["neighbours"]])
+        self.networkx_graph = g
+
     ############################################################################
     ######################## Ruggedness Estimation #############################
     ############################################################################
