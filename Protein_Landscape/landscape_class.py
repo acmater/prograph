@@ -6,6 +6,7 @@ import random
 import pickle
 import tqdm as tqdm
 import itertools
+import networkx as nx
 import multiprocessing as mp
 from sklearn_utils import collapse_concat
 from functools import partial, reduce
@@ -996,12 +997,12 @@ class Protein_Landscape():
             A numpy array of all indexes, which can be passed to the data stores
         """
         if initial_seq is None:
-            initial_seq = self.seed_id
-        idxs = []
+            current_idx = self.seed_id
+        idxs = [current_idx]
         for i in range(num_samples):
-            idx = random.choice(self.graph[initial_seq])
-            idxs.append(idx)
-            initial_seq = tuple(self.tokenized[idx,:-1]) # Choose the new sequence
+            # Choose the new sequence
+            current_idx = random.choice(self.graph[current_idx]["neighbours"])
+            idxs.append(current_idx)
         return np.unique(np.array(idxs))
 
     @staticmethod

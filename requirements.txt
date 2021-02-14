@@ -6,6 +6,7 @@ ca-certificates=2020.10.14=0
 certifi=2020.6.20=py38_0
 colorama=0.4.4=py_0
 cudatoolkit=11.0.221=h6bb024c_0
+decorator=4.4.2=py_0
 dill=0.3.3=pyhd8ed1ab_0
 intel-openmp=2020.2=254
 joblib=0.17.0=py_0
@@ -22,6 +23,7 @@ mkl_fft=1.2.0=py38h23d657b_0
 mkl_random=1.1.1=py38h0573a6f_0
 multiprocess=0.70.11.1=py38h25fe258_0
 ncurses=6.2=he6710b0_1
+networkx=2.5=py_0
 ninja=1.10.2=py38hff7bd54_0
 numpy=1.19.2=py38h54aff64_0
 numpy-base=1.19.2=py38hfa32c7d_0
