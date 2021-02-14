@@ -17,6 +17,7 @@ from colorama import Style
 
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import MinMaxScaler
 
 class Protein_Landscape():
     """
@@ -658,7 +659,7 @@ class Protein_Landscape():
         if graph is None:
             graph = self.graph
 
-        neighbours = graph[tuple(self.tokenized[idx,:-1])]
+        neighbours = graph[tuple(self.tokenized[idx,:-1])]["neighbours"]
         #print(self.fitnesses[neighbours])
         max_comparisons = np.greater(self.fitnesses[idx],self.fitnesses[neighbours])
         min_comparisons = np.less(self.fitnesses[idx],self.fitnesses[neighbours])
@@ -690,9 +691,16 @@ class Protein_Landscape():
         copies = np.invert(np.all(hold_array == seq,axis=1))
         return hold_array[copies]
 
-    def calc_neighbours(self,seq,token_dict=None):
+    def calc_neighbours(self,seq,idx,token_dict=None):
         """
         Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
+
+        There is a particular design decision here that makes it fast in some cases, and slow in others.
+        Instead of checking the entire dataset to see if there are any neighbours present, it calculates all
+        possible neighbours, and checks to see if any of them match entries in the dataset.
+
+        The number of possible neighbours for a given sequence is far smaller than the size of the dataset in almost
+        all cases, which makes this approach significantly faster.
 
         Parameters:
         -----------
@@ -701,11 +709,15 @@ class Protein_Landscape():
 
             Tokenized sequence array
         """
+        if idx is None:
+            idx = np.where(np.all(seq == self.tokenized[:,:-1],axis=1))
+
         if token_dict is None:
             token_dict = self.token_dict
+
         possible_neighbours = self.generate_mutations(seq)
         actual_neighbours = [token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict]
-        return seq, actual_neighbours
+        return seq, idx, actual_neighbours
 
     def calculate_num_extrema(self,idxs=None):
         """
@@ -761,8 +773,9 @@ class Protein_Landscape():
                 pool = mp.Pool(mp.cpu_count())
 
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict)
-        results = pool.map(mapfunc,tqdm.tqdm(dataset))
-        neighbours = {tuple(key) : value for key, value in results}
+        results = pool.starmap(mapfunc,tqdm.tqdm(list(zip(dataset,itertools.count()))))
+        neighbours = {tuple(seq) : {"idx" : idx,
+                                    "neighbours" : neighbours} for seq, idx, neighbours in results}
         return neighbours
 
     def extrema_ruggedness_subset(self,idxs):
@@ -958,7 +971,7 @@ class Protein_Landscape():
         idxs = np.random.choice(len(self), size=(num_samples,))
         return idxs
 
-    def trajectory_data(self,initial_seq=None,num_samples=1000):
+    def random_walk_data(self,initial_seq=None,num_samples=1000):
         """
         Trajectory data takes an initial sequence and then generates a random
         walk through the computer graph of the protein landscape.
@@ -992,6 +1005,37 @@ class Protein_Landscape():
             idxs.append(idx)
             initial_seq = tuple(self.tokenized[idx,:-1]) # Choose the new sequence
         return np.unique(np.array(idxs))
+
+    @staticmethod
+    def mc_criterion(state1, state2, T):
+        preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state2) * T)))
+        return [1-preference_for_state2, preference_for_state2]
+
+    def evolved_trajectory_data(self,initial_seq=None,
+                                     num_steps=1000,
+                                     scaled = True,
+                                     mc_criterion=None,
+                                     T=5):
+        if scaled:
+            scaler = MinMaxScaler()
+            scaler.fit(self.data[:,-1].reshape(-1,1))
+            labels = scaler.transform(self.data[:,-1].reshape(-1,1))
+        else:
+            labels = self.data[:,-1].reshape(-1,1)
+
+        if initial_seq is None:
+            initial_seq = tuple(self.tokenize(self.seed_seq))
+
+        idxs = [self.seed_id]
+        state = self.seed_id
+        if mc_criterion is None:
+            mc_criterion = self.mc_criterion
+
+        for i in range(num_steps):
+            idx = random.choice(self.graph[state]) # Choose random possible neighbour
+            print(state)
+            state = np.random.choice([state, tuple(self.tokenized[idx,:-1])], p = mc_criterion())
+
 
     def deep_sequence_data(self,initial_seq=None,max_distance=1):
         """
