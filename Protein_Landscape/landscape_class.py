@@ -267,6 +267,50 @@ class Protein_Landscape():
     def __getitem__(self,idx):
         return self.data[idx]
 
+    def query(self,sequence,information=True) -> int:
+        """
+        Helper function that interprets a query sequence and accepts multiple formats.
+        This object works by moving indexes of sequences around due to the large increase
+        in computational efficiency, and as a result this function returns the index associated
+        with this sequence
+
+        # Should this be used instead of __getitem__?
+
+        Parameters
+        ----------
+        sequence : str, tuple, int
+
+            The sequence to query against the dataset. Multiple valid input formats
+
+        information : Bool, default=True
+
+            Whether or not to return the information rich form of the protein, i.e
+            its multiple representations, label, and neighbours (leverages the graph object)
+        """
+        if type(sequence) == str:
+            assert sequence in self.sequences,"This sequence is not in the dataset"
+            idx = int(np.where(self.sequences == sequence)[0])
+
+        elif type(sequence) == tuple:
+            assert len(sequence) == len(self.seed()), "Tuple not valid length for dataset"
+            check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
+            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
+            idx = int(check)
+
+        elif type(sequence) == int:
+            assert sequence in range(len(self)), "Index exceeds bounds of dataset"
+            idx = sequence
+
+        else:
+            raise ValueError("Input format not understood")
+
+        if information:
+            assert self.graph is not None, "To provide this information, the graph must be computed"
+            return self.graph[idx]
+
+        else:
+            return idx
+
     def get_distance(self,d,tokenize=False):
         """ Returns all arrays at a fixed distance from the seed string
 
@@ -290,6 +334,9 @@ class Protein_Landscape():
     def gen_d_data(self,seq=None):
         if seq is None:
             seq = self.seed()
+
+        else:
+            seq = self.sequences[self.query(seq,information=False)]
 
         subsets = {x : [] for x in range(len(seq)+1)}
 
@@ -1009,48 +1056,6 @@ class Protein_Landscape():
         preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state1) * T)))
         return np.array([1-preference_for_state2, preference_for_state2]).reshape(-1,)
 
-    def query(self,sequence,information=True):
-        """
-        Helper function that interprets a query sequence and accepts multiple formats.
-        This object works by moving indexes of sequences around due to the large increase
-        in computational efficiency, and as a result this function returns the index associated
-        with this sequence
-
-        Parameters
-        ----------
-        sequence : str, tuple, int
-
-            The sequence to query against the dataset. Multiple valid input formats
-
-        information : Bool, default=True
-
-            Whether or not to return the information rich form of the protein, i.e
-            its multiple representations, label, and neighbours (leverages the graph object)
-        """
-        if sequence is not None:
-            if type(sequence) == str:
-                assert sequence in self.sequences,"This sequence is not in the dataset"
-                idx = int(np.where(self.sequences == sequence)[0])
-
-            elif type(sequence) == tuple:
-                assert len(sequence) == len(self.seed()), "Tuple not valid length for dataset"
-                check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
-                assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
-                idx = int(check)
-
-            elif type(sequence) == int:
-                assert sequence in range(len(self)), "Index exceeds bounds of dataset"
-                idx = sequence
-
-            else:
-                raise ValueError("Input format not understood")
-
-        if information:
-            assert self.graph is not None, "To provide this information, the graph must be computed"
-            return self.graph[idx]
-        else:
-            return idx
-
     def evolved_trajectory_data(self,initial_seq=None,
                                      num_steps=1000,
                                      scaled = True,
@@ -1072,16 +1077,7 @@ class Protein_Landscape():
             labels = self.data[:,-1].reshape(-1,1)
 
         if initial_seq is not None:
-            if type(initial_seq) == str:
-                initial_seq = int(np.where(self.sequences == initial_seq)[0])
-                print(initial_seq)
-            elif type(initial_seq) == tuple:
-                initial_seq = int(np.where(np.all(initial_seq == self.tokenized[:,:-1],axis=1))[0])
-            elif type(initial_seq) == int:
-                pass
-            else:
-                print("Was unable to interpret format sequence was provided in, default to seed sequence")
-                initial_seq = self.seed_id
+            initial_seq = self.query(initial_seq,information=False)
         else:
             initial_seq = self.seed_id
 
@@ -1117,6 +1113,7 @@ class Protein_Landscape():
             initial_seq = tuple(self.tokenize(self.seed_seq))
             d_data      = self.d_data
         else:
+            seq         = self.query(initial_seq,information=False)
             d_data      = self.gen_d_data(seq=seq)
 
         idxs = reduce(np.add,[d_data[d] for d in range(1,max_distance+1)])
