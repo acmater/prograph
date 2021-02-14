@@ -1000,21 +1000,28 @@ class Protein_Landscape():
             current_idx = self.seed_id
         idxs = [current_idx]
         for i in range(num_samples):
-            # Choose the new sequence
             current_idx = random.choice(self.graph[current_idx]["neighbours"])
             idxs.append(current_idx)
         return np.unique(np.array(idxs))
 
     @staticmethod
     def mc_criterion(state1, state2, T):
-        preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state2) * T)))
-        return [1-preference_for_state2, preference_for_state2]
+        preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state1) * T)))
+        return np.array([1-preference_for_state2, preference_for_state2]).reshape(-1,)
 
     def evolved_trajectory_data(self,initial_seq=None,
                                      num_steps=1000,
                                      scaled = True,
                                      mc_criterion=None,
                                      T=5):
+        """
+        Evolves a trajectory from an initial seed sequence using a Monte Carlo Criterion
+        that can be provided as a generic python function.
+
+        Parameters
+        ----------
+
+        """
         if scaled:
             scaler = MinMaxScaler()
             scaler.fit(self.data[:,-1].reshape(-1,1))
@@ -1022,19 +1029,30 @@ class Protein_Landscape():
         else:
             labels = self.data[:,-1].reshape(-1,1)
 
-        if initial_seq is None:
-            initial_seq = tuple(self.tokenize(self.seed_seq))
+        if initial_seq is not None:
+            if type(initial_seq) == str:
+                initial_seq = int(np.where(self.sequences == initial_seq)[0])
+                print(initial_seq)
+            elif type(initial_seq) == tuple:
+                initial_seq = int(np.where(np.all(initial_seq == self.tokenized[:,:-1],axis=1))[0])
+            elif type(initial_seq) == int:
+                pass
+            else:
+                print("Was unable to interpret format sequence was provided in, default to seed sequence")
+                initial_seq = self.seed_id
+        else:
+            initial_seq = self.seed_id
 
-        idxs = [self.seed_id]
-        state = self.seed_id
+        idxs = [initial_seq]
+        state = initial_seq
         if mc_criterion is None:
             mc_criterion = self.mc_criterion
 
         for i in range(num_steps):
-            idx = random.choice(self.graph[state]) # Choose random possible neighbour
-            print(state)
-            state = np.random.choice([state, tuple(self.tokenized[idx,:-1])], p = mc_criterion())
-
+            idx = random.choice(self.graph[state]["neighbours"]) # Choose random possible neighbour
+            state = np.random.choice([state, idx], p = mc_criterion(labels[state],labels[idx],T))
+            idxs.append(state)
+        return idxs
 
     def deep_sequence_data(self,initial_seq=None,max_distance=1):
         """
