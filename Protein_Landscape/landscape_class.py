@@ -1059,10 +1059,29 @@ class Protein_Landscape():
         idxs = np.random.choice(len(self), size=(num_samples,))
         return idxs
 
-    def random_walk_data(self,initial_seq=None,num_samples=1000):
+    def random_walk_data(self,T=10000,
+                              **kwargs):
         """
-        Trajectory data takes an initial sequence and then generates a random
-        walk through the computer graph of the protein landscape.
+        Helper method that generates a random walk by performing a Monte Carlo
+        walk with a very high temperature. See self.evolved_trajectory_data for
+        complete call signature.
+        """
+        return self.evolved_trajectory_data(T=T,**kwargs)
+
+    @staticmethod
+    def mc_criterion(state1, state2, T):
+        preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state1) * 1/T)))
+        return np.array([1-preference_for_state2, preference_for_state2]).reshape(-1,)
+
+    def evolved_trajectory_data(self,initial_seq=None,
+                                     num_steps=1000,
+                                     scaled = True,
+                                     mc_criterion=None,
+                                     T=0.01,
+                                     remove_duplicates=False):
+        """
+        Evolves a trajectory from an initial seed sequence using a Monte Carlo Criterion
+        that can be provided as a generic python function.
 
         IMPORTANT : It is allowed to sample the same position multiple times,
         with duplicate entries being removed before the indices are returned.
@@ -1074,42 +1093,43 @@ class Protein_Landscape():
             The initial sequence from which the random walk will begin. If none,
             will use the seed sequence of the dataset.
 
-        num_samples : int, default=1000
+        num_steps : int, default=1000
 
             The number of steps that the algorithm is allowed to take through the
-            graph
+            graph.
+
+        scaled : Bool, default=True
+
+            Whether or not the data should be scaled to be within a range of 0 to 1
+            to remove scale based artefacts of the Monte Carlo Criterion
+
+        mc_criterion : func, default=None
+
+            A Python function to calculate the probability of choosing a new state (state2)
+            over the previous state (state1). Must use the same signature as the
+            mc_criterion static method above
+
+            def mc_criterion(state1 : float32, state2 : float32, T : float32) -> np.array[p(state1),p(state2)]
+
+            The state inputs are the fitness labels assocaiated with the states
+
+        T : float, default=0.01
+
+            A sensitivity (or "temperature") parameter, with lower values increasing the
+            preference for lower energy states, i.e cooling produces a more ordered system.
+
+            Higher temperatures make this procedure analogous to a random walk.
+
+        remove_duplicates : Bool, default=False
+
+            Whether or not to remove duplicate indexes from the list. By default the answer is no.
 
         Returns
         -------
-        idxs : np.array
 
-            A numpy array of all indexes, which can be passed to the data stores
-        """
-        if initial_seq is None:
-            current_idx = self.seed_id
-        idxs = [current_idx]
-        for i in range(num_samples):
-            current_idx = random.choice(self.graph[current_idx]["neighbours"])
-            idxs.append(current_idx)
-        return np.unique(np.array(idxs))
+        idxs : np.array(num_steps,)
 
-    @staticmethod
-    def mc_criterion(state1, state2, T):
-        preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state1) * T)))
-        return np.array([1-preference_for_state2, preference_for_state2]).reshape(-1,)
-
-    def evolved_trajectory_data(self,initial_seq=None,
-                                     num_steps=1000,
-                                     scaled = True,
-                                     mc_criterion=None,
-                                     T=5):
-        """
-        Evolves a trajectory from an initial seed sequence using a Monte Carlo Criterion
-        that can be provided as a generic python function.
-
-        Parameters
-        ----------
-
+            A numpy array of all indices sampled during the walk.
         """
         if scaled:
             scaler = MinMaxScaler()
