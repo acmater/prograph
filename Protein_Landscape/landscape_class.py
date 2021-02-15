@@ -210,6 +210,8 @@ class Protein_Landscape():
 
         self.d_data = self.gen_d_data()
 
+        # Need to fix this at some point
+
         if self.gen_graph is False:
             self.graph = None
 
@@ -308,8 +310,8 @@ class Protein_Landscape():
         else:
             return idx
 
-    def get_distance(self,dist,d_data=None,tokenize=False):
-        """ Returns all arrays at a fixed distance from the seed string
+    def get_distance(self,dist,d_data=None):
+        """ Returns all the index of all arrays at a fixed distance from the seed string
 
         Parameters
         ----------
@@ -321,20 +323,12 @@ class Protein_Landscape():
 
             A custom d_data dictionary can be provided. If none is provided, self.d_data
             is used.
-
-        tokenize : Bool, False
-
-            Whether or not the returned data will be in tokenized form or not.
         """
         if d_data is None:
             d_data = self.d_data
 
         assert dist in d_data.keys(), "Not a valid distance for this dataset"
-
-        if tokenize:
-            return self.tokenized[d_data[dist]]
-        else:
-            return self.data[d_data[dist]]
+        return d_data[dist]
 
     def gen_d_data(self,seq=None) -> dict:
         """
@@ -369,7 +363,7 @@ class Protein_Landscape():
         self.max_distance = max(d_data.keys())
         return d_data
 
-    def get_mutated_positions(self,positions,tokenize=False):
+    def get_mutated_positions(self,positions):
         """
         Function that returns the portion of the data only where the provided positions
         have been modified.
@@ -379,10 +373,6 @@ class Protein_Landscape():
         positions : np.array(ints)
 
             Numpy array of integer positions that will be used to index the data.
-
-        tokenize : Bool, default=False
-
-            Boolean that determines if the returned data will be tokenized or not.
         """
         for pos in positions:
             assert pos in self.mutated_positions, "{} is not a position that was mutated in this dataset".format(pos)
@@ -390,12 +380,10 @@ class Protein_Landscape():
         constants = np.setdiff1d(self.mutated_positions,positions)
         index_array = np.ones((len(self.seed_seq)),dtype=np.int8)
         index_array[positions] = 0
-        mutated_indexes = np.all(np.invert(self.sequence_mutation_locations[:,constants]),axis=1) # This line checks only the positions that have to be constant, and ensures that they all are
+        mutated_indexes = np.all(np.invert(self.sequence_mutation_locations[:,constants]),axis=1)
+        # This line checks only the positions that have to be constant, and ensures that they all are
 
-        if tokenize:
-            return self.tokenized[mutated_indexes]
-        else:
-            return self.data[mutated_indexes]
+        return mutated_indexes
 
     @staticmethod
     def hamming(str1, str2):
@@ -918,12 +906,12 @@ class Protein_Landscape():
             data = data
         elif distance:
             if type(distance) == int:
-                data = copy.copy(self.get_distance(distance,tokenize=True))
+                data = copy.copy(self.tokenized[self.get_distance(distance)])
             else:
-                data = collapse_concat([copy.copy(self.get_distance(d,tokenize=True)) for d in distance])
+                data = collapse_concat([copy.copy(self.tokenized[self.get_distance(d)]) for d in distance])
 
         elif positions is not None:
-            data = copy.copy(self.get_mutated_positions(positions,tokenize=True))
+            data = copy.copy(self.tokenized[self.get_mutated_positions(positions)])
         else:
             data = copy.copy(self.tokenized)
 
@@ -1032,32 +1020,33 @@ class Protein_Landscape():
             Value used to assign ground truth status for algorithms such as GANs. 0 is the default
             to enable better gradient movement
         """
-        if idxs is not None:
-            pass
+        if tokenize:
+            stored_data = self.tokenized
+        else:
+            stored_data = self.data
 
-        if distance:
+        if idxs is not None:
+            data = stored_data[idxs]
+
+        elif distance:
             if type(distance) == int:
-                data = self.get_distance(distance,tokenize=True)
+                data = stored_data[self.get_distance(distance)]
             else:
-                data = collapse_concat([self.get_distance(d,tokenize=True) for d in distance])
+                data = collapse_concat([stored_data[self.get_distance(d)] for d in distance])
 
         elif positions is not None:
-            data = self.get_mutated_positions(positions,tokenize=True)
-        else:
-            data = self.tokenized
+            data = stored_data[self.get_mutated_positions(positions)]
 
-        if tokenize:
-            if unsupervised:
-                labels = {torch.Tensor(x[:-1].astype('int8')).long() : real_label for x in data}
-            else:
-                labels = {torch.Tensor(x[:-1].astype('int8')).long() : x[-1] for x in data}
         else:
-            if unsupervised:
-                labels = {x[0] : real_label for x in self.data}
-            else:
-                labels = {x[0] : x[1] for x in self.data}
+            data = stored_data
+
+        if unsupervised:
+            labels = {torch.Tensor(x[:-1].astype('int8')).long() : real_label for x in data}
+        else:
+            labels = {torch.Tensor(x[:-1].astype('int8')).long() : x[-1] for x in data}
 
         keys   = list(labels.keys())
+        
         return self.gen_dataloaders(labels=labels, keys=keys, params=params, split_point=split_point)
 
     def shotgun_data(self,num_samples=1000):
