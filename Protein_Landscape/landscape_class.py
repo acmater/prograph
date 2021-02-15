@@ -120,7 +120,10 @@ class Protein_Landscape():
 
         The maximum distance from the seed sequence within the dataset.
 
-    graph : {tuple(tokenized_seq) : np.array[neighbour_indices]}
+    graph : {idx  : "tokenized"  : tuple(int)     - a Tuple representation of the tokenized protein sequence
+                    "string"     : str            - string representation of protein sequence
+                    "fitness"    : float          - The fitness value associated with this protein
+                    "neighbours" : np.array[idxs] - A numpy array of indexes in the dataset that are neighbours
 
         A memory efficient storage of the graph that can be passed to graph visualisation packages
 
@@ -210,7 +213,7 @@ class Protein_Landscape():
 
         self.d_data = self.gen_d_data()
 
-        # Need to fix this at some point
+        # FIX THE CODE BELOW
 
         if self.gen_graph is False:
             self.graph = None
@@ -683,7 +686,17 @@ class Protein_Landscape():
     # Graph Section
     def build_graph(self,idxs=None):
         """
-        Efficiently builds the graph of the protein landscape
+        Efficiently builds the graph of the protein landscape. There are two ways to build
+        graphs for protein networks. The first considers the entire data sequence and calculates
+        the Hamming distance for each pair (once) and uses this information to identify the neighbours.
+
+        The second is to explicitly produce the neighbours, and then check to see if any of them are
+        in the dataset. The second approach is typically vastly quicker. The reason for this is that even for
+        an enormous protein (500 AAs) with the full 20 canonical amino acids and possible mutants, there are only
+        10000 neighbours to generate and then perform in membership checking on.
+
+        Most protein datasets have 10s to 100s of thousands of entries, and as such, this approach leads to dramatic
+        speed ups.
 
         Parameters:
         -----------
@@ -1061,15 +1074,6 @@ class Protein_Landscape():
         idxs = np.random.choice(len(self), size=(num_samples,))
         return idxs
 
-    def random_walk_data(self,T=10000,
-                              **kwargs):
-        """
-        Helper method that generates a random walk by performing a Monte Carlo
-        walk with a very high temperature. See self.evolved_trajectory_data for
-        complete call signature.
-        """
-        return self.evolved_trajectory_data(T=T,**kwargs)
-
     @staticmethod
     def mc_criterion(state1, state2, T):
         preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state1) * 1/T)))
@@ -1155,6 +1159,16 @@ class Protein_Landscape():
             state = np.random.choice([state, idx], p = mc_criterion(labels[state],labels[idx],T))
             idxs.append(state)
         return idxs
+
+
+    def random_walk_data(self,T=10000,
+                              **kwargs):
+        """
+        Helper method that generates a random walk by performing a Monte Carlo
+        walk with a very high temperature. See self.evolved_trajectory_data for
+        complete call signature.
+        """
+        return self.evolved_trajectory_data(T=T,**kwargs)
 
     def deep_sequence_data(self,initial_seq=None,max_distance=1):
         """

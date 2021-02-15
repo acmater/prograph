@@ -35,3 +35,6 @@ The package strives to achieve high speeds wherever possible by leveraging numpy
 2. Add functionality to export protein landscape graph to cytoscape
 3. Need to make all data acquisition schemes utilize the same syntax which allows you to manually specify a data array
 4. Add support for the generation of tensorflow data loaders
+5. Add a switch in graph generation which allows it to change to the pairwise dataset method if some particular threshold
+is breached (i.e the dataset is tiny and the sequences are long). I should possibly do a proper comparison of the two approaches
+and see the tradeoff in speed for choosing one over another.
