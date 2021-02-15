@@ -137,7 +137,7 @@ class Protein_Landscape():
         The floating point ruggedness of the landscape calculated as the normalized
         number of maxima and minima.
 
-    Written by Adam Mater, last revision 14.2.21
+    Written by Adam Mater, last revision 15.2.21
     """
 
     def __init__(self,data=None,
