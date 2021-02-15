@@ -722,10 +722,9 @@ class Protein_Landscape():
         # So the problem here is that I do not know how to stick labels on with the
         # nodes. As a result, cytoscape won't be able to visualize the graphs properly.
         g = nx.Graph()
-        for idx in range(len(self)):
-            g.add_nodes_from(self.sequences[idx])#,attr_dict={"fitness" : self.fitnesses[idx]})
+        g.add_nodes_from(self.sequences)#,attr_dict={"fitness" : self.fitnesses[idx]})
         for node in tqdm.tqdm(self.sequences):
-            # I could just shift this to an enumerate operation, I just want to be absolute
+            # I could just shift this to an enumerate operation, I just want to be absolutely
             # positive that there is no strange changes to the ordering.
             idx = int(np.where(self.sequences == node)[0])
             g.add_edges_from([(node, self.sequences[neighbour_idx]) for neighbour_idx in self.graph[idx]["neighbours"]])
@@ -1046,7 +1045,7 @@ class Protein_Landscape():
             labels = {torch.Tensor(x[:-1].astype('int8')).long() : x[-1] for x in data}
 
         keys   = list(labels.keys())
-        
+
         return self.gen_dataloaders(labels=labels, keys=keys, params=params, split_point=split_point)
 
     def shotgun_data(self,num_samples=1000):
