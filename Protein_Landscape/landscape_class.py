@@ -269,9 +269,9 @@ class Protein_Landscape():
         return len(self.sequences)
 
     def __getitem__(self,idx):
-        return self.data[self.query(idx,information=False)]
+        return self.data[self.query(idx)]
 
-    def query(self,sequence,information=True) -> int:
+    def query(self,sequence,information=False) -> int:
         """
         Helper function that interprets a query sequence and accepts multiple formats.
         This object works by moving indexes of sequences around due to the large increase
@@ -352,7 +352,7 @@ class Protein_Landscape():
             seq = self.seed()
 
         else:
-            seq = self.sequences[self.query(seq,information=False)]
+            seq = self.sequences[self.query(seq)]
 
         subsets = {x : [] for x in range(len(seq)+1)}
 
@@ -393,7 +393,7 @@ class Protein_Landscape():
         """Calculates the Hamming distance between 2 strings"""
         return sum(c1 != c2 for c1, c2 in zip(str1, str2))
 
-    def hamming_array(self,seq=None,data=None):
+    def hamming_array(self,seq=None,idxs=None):
         """
         Function to calculate the hamming distances of every array using vectorized
         operations
@@ -407,16 +407,22 @@ class Protein_Landscape():
 
         Parameters:
         -----------
-        seq : np.array[int], default=None
+        seq : str, int, tuple
 
-            Sequence which will be compared to the entire dataset.
+            Any valid sequence representation (see query for valid formats)
+
+        idxs : np.array[int]
+
+            A numpy integer index array
         """
         if seq is None:
-            tokenized_seq = np.array(self.tokenize(self.seed_seq))
+            tokenized_seq = self.tokenized[0,:-1]
         else:
-            tokenized_seq = np.array(self.tokenize(seq))
+            tokenized_seq = self.tokenized[self.query(seq),:-1]
 
-        if data is None:
+        if idxs is not None:
+            data = self.tokenized[idxs,:-1]
+        else:
             data = self.tokenized[:,:-1]
 
         #hold_array     = np.zeros((len(self.sequences),len(tokenized_seq)))
@@ -608,31 +614,6 @@ class Protein_Landscape():
         self.__dict__ = pickle.loads(dataPickle)
         return True
 
-    # Ruggedness Section
-    def is_extrema(self,idx,graph=None):
-        """
-        Takes the ID of a sequence and determines whether or not it is a maxima given its neighbours
-
-        Parameters:
-        -----------
-        idx : int
-
-            Integer index of the sequence that will be checked as a maxima.
-        """
-        if graph is None:
-            graph = self.graph
-
-        neighbours = graph[idx]["neighbours"]
-        #print(self.fitnesses[neighbours])
-        max_comparisons = np.greater(self.fitnesses[idx],self.fitnesses[neighbours])
-        min_comparisons = np.less(self.fitnesses[idx],self.fitnesses[neighbours])
-        if np.all(max_comparisons):
-            return 1
-        elif np.all(min_comparisons): # Checks to see if the point is a minima
-            return -1
-        else:
-            return 0
-
     def generate_mutations(self,seq):
         """
         Takes a sequence and generates all possible mutants 1 Hamming distance away
@@ -658,7 +639,7 @@ class Protein_Landscape():
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,idx,token_dict=None):
+    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True):
         """
         Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
 
@@ -672,16 +653,31 @@ class Protein_Landscape():
         Parameters:
         -----------
 
-        seq : np.array[int]
+        seq : int, str, tuple
 
-            Tokenized sequence array
+            A sequence in any of the valid formats.
+
+        token_dict : {tuple(tokenized_representation) : int}, default=None
+
+            A token dictionary that matches each tokenized sequence to its integer index.
+
+        explicit_neighbours : Bool, default=True
+
+            How the graph is calculated. Explicit neighbours means that it will generate all
+            possible neighbours then check to see if they're in the dataset. Otherwise it will check
+            each sequence in the dataset against each other sequence.
         """
         if token_dict is None:
             token_dict = self.token_dict
 
-        possible_neighbours = self.generate_mutations(self.tokenized[idx,:-1])
-        actual_neighbours = [token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict]
-        return idx, actual_neighbours
+        if explicit_neighbours:
+            possible_neighbours = self.generate_mutations(self.tokenized[self.query(seq),:-1])
+            actual_neighbours = [token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict]
+
+        else:
+            actual_neighbours = np.where(self.hamming_array(self.query(seq)) == 1)[0]
+
+        return seq, actual_neighbours
 
     # Graph Section
     def build_graph(self,idxs=None):
@@ -720,7 +716,19 @@ class Protein_Landscape():
             else:
                 pool = mp.Pool(mp.cpu_count())
 
-        mapfunc = partial(self.calc_neighbours,token_dict=token_dict)
+        # This section roughly estimates the cost of the two different approaches to calculating the graph
+        # representation of the dataset, and determines which to use based around whichever will result in
+        # fewer total operations.
+
+        calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed()) * len(self)
+        calculating_implicit_neighbours = len(self) ** 2
+
+        if calculating_explicit_neighbours >= calculating_implicit_neighbours:
+            explicit_neighbours=False
+        else:
+            explicit_neighbours=True
+
+        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours)
         results = pool.map(mapfunc,tqdm.tqdm(range(len(self))))
         neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
                                     "string"      : self.sequences[idx],
@@ -746,6 +754,31 @@ class Protein_Landscape():
     ############################################################################
     ######################## Ruggedness Estimation #############################
     ############################################################################
+
+    # Ruggedness Section
+    def is_extrema(self,idx,graph=None):
+        """
+        Takes the ID of a sequence and determines whether or not it is a maxima given its neighbours
+
+        Parameters:
+        -----------
+        idx : int
+
+            Integer index of the sequence that will be checked as a maxima.
+        """
+        if graph is None:
+            graph = self.graph
+
+        neighbours = graph[idx]["neighbours"]
+        #print(self.fitnesses[neighbours])
+        max_comparisons = np.greater(self.fitnesses[idx],self.fitnesses[neighbours])
+        min_comparisons = np.less(self.fitnesses[idx],self.fitnesses[neighbours])
+        if np.all(max_comparisons):
+            return 1
+        elif np.all(min_comparisons): # Checks to see if the point is a minima
+            return -1
+        else:
+            return 0
 
     def calculate_num_extrema(self,idxs=None):
         """
@@ -1155,7 +1188,7 @@ class Protein_Landscape():
             labels = self.data[:,-1].reshape(-1,1)
 
         if initial_seq is not None:
-            initial_seq = self.query(initial_seq,information=False)
+            initial_seq = self.query(initial_seq)
         else:
             initial_seq = self.seed_id
 
@@ -1201,7 +1234,7 @@ class Protein_Landscape():
             initial_seq = tuple(self.tokenize(self.seed_seq))
             d_data      = self.d_data
         else:
-            seq         = self.query(initial_seq,information=False)
+            seq         = self.query(initial_seq)
             d_data      = self.gen_d_data(seq=seq)
 
         idxs = reduce(np.union1d,[d_data[d] for d in range(1,max_distance+1)])

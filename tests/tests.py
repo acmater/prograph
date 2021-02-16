@@ -72,7 +72,7 @@ class TestIndexingOperations(unittest.TestCase):
     def test_distance_indexing(self):
         with self.assertRaises(AssertionError):
             landscape.indexing(distances=[1,2,4])
-        assert len(landscape.indexing(distances[1,3])) == 756
+        assert len(landscape.indexing(distances=[1,3])) == 756
 
 if __name__ == "__main__":
     unittest.main()
