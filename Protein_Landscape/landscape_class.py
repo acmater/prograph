@@ -723,6 +723,9 @@ class Protein_Landscape():
         calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed()) * len(self)
         calculating_implicit_neighbours = len(self) ** 2
 
+        print(calculating_explicit_neighbours)
+        print(calculating_implicit_neighbours)
+
         if calculating_explicit_neighbours >= calculating_implicit_neighbours:
             explicit_neighbours=False
         else:
