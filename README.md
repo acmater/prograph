@@ -31,10 +31,15 @@ The package strives to achieve high speeds wherever possible by leveraging numpy
 
 ### Todo
 
-1. Work out how to handle the seed sequence. Should it be removed or not?
-2. Add functionality to export protein landscape graph to cytoscape
-3. Need to make all data acquisition schemes utilize the same syntax which allows you to manually specify a data array
-4. Add support for the generation of tensorflow data loaders
-5. Add a switch in graph generation which allows it to change to the pairwise dataset method if some particular threshold
+1. Standardize the index arrays that are passed around. They should all be integer index arrays that use union1d to calculate the mixing of them.
+2. Work out how to handle the seed sequence. Should it be removed or not?
+    No, it shouldn't be removed, however I need to deal with the fact that it often isn't explicitly included with a fitness value.
+3. Add functionality to export protein landscape graph to cytoscape
+    Done
+4. Need to make all data acquisition schemes utilize the same syntax which allows you to manually specify an index array
+5. Add support for the generation of tensorflow data loaders
+6. Add a switch in graph generation which allows it to change to the pairwise dataset method if some particular threshold
 is breached (i.e the dataset is tiny and the sequences are long). I should possibly do a proper comparison of the two approaches
 and see the tradeoff in speed for choosing one over another.
+7. Remove plotting code from Jupyter Notebooks.
+8. Increase breadth of tests that are written.
