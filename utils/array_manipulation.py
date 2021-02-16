@@ -1,3 +1,5 @@
+import numpy as np
+
 def collapse_concat(arrays,dim=0):
     """
     Takes an iterable of arrays and recursively concatenates them. Functions similarly

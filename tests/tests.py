@@ -68,5 +68,11 @@ class TestDataSamplingMethods(unittest.TestCase):
         assert 9 in idxs, "Not correctly calculating distance of 1 from 'CAL'"
 
 
+class TestIndexingOperations(unittest.TestCase):
+    def test_distance_indexing(self):
+        with self.assertRaises(AssertionError):
+            landscape.indexing(distances=[1,2,4])
+        assert len(landscape.indexing(distances[1,3])) == 756
+
 if __name__ == "__main__":
     unittest.main()

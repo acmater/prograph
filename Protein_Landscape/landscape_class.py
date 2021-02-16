@@ -785,12 +785,22 @@ class Protein_Landscape():
         Function that handles more complex indexing operations, for example wanting
         to combine multiple distance indexes or asking for a random set of indices of a given
         length relative to the overall dataset
+
+        Parameters
+        ----------
+        distances : [int], default=None
+
+            A list of integer distances that the dataset will return.
         """
         if distances is not None:
-            # Uses reduce from functools package and the bitwise or operation
-            # to recursively combine the indexing arrays, returning a final array
-            # where all Trues are collated into one array
-            return reduce(np.logical_or, [self.d_data[d] for d in distances])
+            if type(distances) == int:
+                distances = [distances]
+            assert type(distances) == list, "Distances must be provided as integer or list"
+            for d in distances:
+                assert d in self.d_data.keys(), f"{d} is not a valid distance"
+            # Uses reduce from functools package and the union1d operation
+            # to recursively combine the indexing arrays.
+            return reduce(np.union1d, [self.d_data[d] for d in distances])
 
         if percentage is not None:
             assert 0 <= percentage <= 1, "Percentage must be between 0 and 1"
