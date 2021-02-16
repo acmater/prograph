@@ -672,7 +672,7 @@ class Protein_Landscape():
 
         if explicit_neighbours:
             possible_neighbours = self.generate_mutations(self.tokenized[self.query(seq),:-1])
-            actual_neighbours = [token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict]
+            actual_neighbours = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
             actual_neighbours = np.where(self.hamming_array(self.query(seq)) == 1)[0]
@@ -722,9 +722,6 @@ class Protein_Landscape():
 
         calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed()) * len(self)
         calculating_implicit_neighbours = len(self) ** 2
-
-        print(calculating_explicit_neighbours)
-        print(calculating_implicit_neighbours)
 
         if calculating_explicit_neighbours >= calculating_implicit_neighbours:
             explicit_neighbours=False

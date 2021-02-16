@@ -30,6 +30,8 @@ class TestDistanceGeneration(unittest.TestCase):
     def test_get_distance_custom_d_data(self):
         out = landscape.data[landscape.get_distance(dist=0,d_data=landscape.gen_d_data(seq="ACL"))]
         assert out[0][0] == 'ACL'
+    def test_calc_neighnours(self):
+        assert np.all(landscape.calc_neighbours(seq="ACL",explicit_neighbours=False)[1] == landscape.calc_neighbours(seq="ACL",explicit_neighbours=True)[1]), "Calc neighbours has an error"
 
 class TestPyTorchDataLoaders(unittest.TestCase):
     def test_pytorch_dataloader_generation(self):

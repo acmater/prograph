@@ -17,22 +17,11 @@ The code has two fundamental subcomponents:
 1.   The ability to slice the data in a wide variety of ways.
 2.   The ability to return the data to you in the form of useful objects.
 
-Modifying the code should work to maintain this syntax. In general, what is passed between
-functions are indexes stored as numpy arrays. They are stored on one of two formats,
-the first is as an array of integer indexes, the second is as a Boolean index array.
-
-The former is more memory efficient as the index arrays can become highly sparse data. However
-the latter has advantages when calculating the union.
-
-I am fairly confident that I can standardize it to just the integer index arrays by employing
-the np.union1d operation when merging different index operations.
-
 The package strives to achieve high speeds wherever possible by leveraging numpy's abilities.
 
 ### Todo
 
-2. Work out how to handle the seed sequence. Should it be removed or not?
+1. Work out how to handle the seed sequence. Should it be removed or not?
     No, it shouldn't be removed, however I need to deal with the fact that it often isn't explicitly included with a fitness value.
-5. Add support for the generation of tensorflow data loaders
-
-7. Remove plotting code from Jupyter Notebooks.
+2. Add support for the generation of tensorflow data loaders
+3. Should I consider updating the array operations to use the cupy package?
