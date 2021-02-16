@@ -7,9 +7,9 @@ import pickle
 import tqdm as tqdm
 import networkx as nx
 import multiprocessing as mp
-from sklearn_utils import collapse_concat
+from utils.array_manipulation import collapse_concat
 from functools import partial, reduce
-from Dataset import Dataset
+from utils.dataset import Dataset
 import torch
 
 from colorama import Fore
@@ -359,7 +359,7 @@ class Protein_Landscape():
         self.hammings = self.hamming_array(seq=seq)
 
         for distance in range(len(seq)+1):
-            subsets[distance] = np.equal(distance,self.hammings)
+            subsets[distance] = np.where(np.equal(distance,self.hammings))[0]
             # Stores an indexing array that isolates only sequences with that Hamming distance
 
         d_data = {k : v for k,v in subsets.items() if v.any()}
@@ -1194,7 +1194,7 @@ class Protein_Landscape():
             seq         = self.query(initial_seq,information=False)
             d_data      = self.gen_d_data(seq=seq)
 
-        idxs = reduce(np.add,[d_data[d] for d in range(1,max_distance+1)])
+        idxs = reduce(np.union1d,[d_data[d] for d in range(1,max_distance+1)])
         return idxs
 
 if __name__ == "__main__":

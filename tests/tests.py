@@ -57,6 +57,16 @@ class TestPyTorchDataLoaders(unittest.TestCase):
         train_dl, test_dl = landscape.pytorch_dataloaders(unsupervised=True)
         assert torch.all(0 == next(iter(test_dl))[1]) and len(next(iter(test_dl))[1]) == 200, "Failed to generate correct unsupervised dataloaders"
 
+class TestDataSamplingMethods(unittest.TestCase):
+    def test_deep_sequence_generation(self):
+        idxs = landscape.deep_sequence_data(max_distance=2)
+        assert len(idxs) == 270, "Deep Sequence Sampling now has an error"
+        assert 111 not in idxs, "An amino acid with a distance from 3 is failing"
+    def test_deep_sequence_generation_initial_seq(self):
+        idxs = landscape.deep_sequence_data(initial_seq="CAL",max_distance=1)
+        assert len(idxs) == 27, "Wrong sequence length for deep sampling"
+        assert 9 in idxs, "Not correctly calculating distance of 1 from 'CAL'"
+
 
 if __name__ == "__main__":
     unittest.main()
