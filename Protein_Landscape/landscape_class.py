@@ -303,7 +303,7 @@ class Protein_Landscape():
             assert sequence in range(len(self)), "Index exceeds bounds of dataset"
             idx = sequence
 
-        elif type(sequence) == np.int64:
+        elif isinstance(sequence, np.integer):
             assert sequence in range(len(self)), "Index exceeds bounds of dataset"
             idx = sequence
 
@@ -643,7 +643,7 @@ class Protein_Landscape():
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True):
+    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True,idxs=None):
         """
         Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
 
@@ -679,7 +679,7 @@ class Protein_Landscape():
             actual_neighbours = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
-            actual_neighbours = np.where(self.hamming_array(self.query(seq),idxs=token_dict.keys()) == 1)[0]
+            actual_neighbours = np.where(self.hamming_array(self.query(seq),idxs=idxs) == 1)[0]
 
         return seq, actual_neighbours
 
@@ -709,7 +709,7 @@ class Protein_Landscape():
             print("Building Protein Graph for entire dataset")
             token_dict = self.token_dict
             pool = mp.Pool(mp.cpu_count())
-            indexes = range(len(self))
+            indexes = np.array(range(len(self)))
 
         else:
             print("Building Protein Graph For subset of length {}".format(sum(idxs)))
@@ -733,9 +733,7 @@ class Protein_Landscape():
         else:
             explicit_neighbours=True
 
-        print(explicit_neighbours)
-
-        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours)
+        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
         results = pool.map(mapfunc,tqdm.tqdm(indexes))
         neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
                                     "string"      : self.sequences[idx],
