@@ -299,20 +299,23 @@ class Protein_Landscape():
             assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
             idx = int(check)
 
-        elif type(sequence) == int:
+        elif type(sequence) == int or isinstance(sequence, np.integer):
             assert sequence in range(len(self)), "Index exceeds bounds of dataset"
             idx = sequence
 
-        elif isinstance(sequence, np.integer):
-            assert sequence in range(len(self)), "Index exceeds bounds of dataset"
-            idx = sequence
+        elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
+            assert isinstance(sequence[0], np.integer) or isinstance(sequence[0], int), "Wrong data format in numpy array or list iterable"
+            idx      = sequence
 
         else:
             raise ValueError("Input format not understood")
 
         if information:
-            assert self.graph is not None, "To provide this information, the graph must be computed"
-            return self.graph[idx]
+            assert self.graph is not None, "To provide additional information, the graph must be computed"
+            if isinstance(idx, np.ndarray) or isinstance(idx, list):
+                return {ix : self.graph[ix] for ix in idx}
+            else:
+                return self.graph[idx]
 
         else:
             return idx
