@@ -12,15 +12,31 @@ class TestGenLandscape(unittest.TestCase):
 
 landscape = Protein_Landscape(csv_path="../Data/Small_NK.csv",gen_graph=True)
 
-class TestIndexing(unittest.TestCase):
+class TestQuery(unittest.TestCase):
     def test_string_idx(self):
-        landscape["AAC"]
+        assert landscape["AAC"][0] == "AAC", "String indexing has failed"
     def test_int_idx(self):
-        landscape[1]
+        assert landscape[26][0] == "ADH", "Integer indexing has failed"
     def test_tuple_idx(self):
-        landscape[(0,1,1)]
+        assert landscape[(0,1,1)][0] == "ACC", "Tuple indexing has failed"
     def test_len(self):
-        len(landscape)
+        assert len(landscape) == 1000, "__getitem__ method is failing"
+    def test_list(self):
+        assert landscape[[1,2,4]][2][0] == "AAF", "list indexing has failed"
+    def test_array(self):
+        assert landscape[np.array([63,87])][1][0] == "AKI", "numpy array indexing has failed"
+
+class TestIndexing(unittest.TestCase):
+    def test_positions(self):
+        assert len(landscape.indexing(positions=[1,2])) == 99, "Positional Indexing is not working"
+    def test_distances(self):
+        assert len(landscape.indexing(distances=3)) == 729, "Distance based indexing is not working"
+    def test_pos_dist(self):
+        assert len(landscape.indexing(positions=[1,2],distances=2)) == 81 and len(landscape.indexing(distances=2)) == 243, "Positional and distance indexing are not working when combined"
+    def test_percentage(self):
+        assert len(landscape.indexing(percentage=0.7)) == 700, "Percentage indexing is not working"
+    def test_pos_dist_perc(self):
+        assert len(landscape.indexing(positions=[1,2],distances=2,percentage=0.3)) == 24, "All forms of indexing fail when combined"
 
 class TestDistanceGeneration(unittest.TestCase):
     def test_get_distance_normal(self):

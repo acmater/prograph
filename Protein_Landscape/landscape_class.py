@@ -331,6 +331,10 @@ class Protein_Landscape():
         distances : [int], default=None
 
             A list of integer distances that the dataset will return.
+
+        percentage : float, default=None, 0 <= split_point <= 1
+
+            Will return a fraction of the data.
         """
         idxs = []
 
@@ -343,13 +347,6 @@ class Protein_Landscape():
             # Uses reduce from functools package and the union1d operation
             # to recursively combine the indexing arrays.
             idxs.append(reduce(np.union1d, [self.d_data[d] for d in distances]))
-
-        if percentage is not None:
-            assert 0 <= percentage <= 1, "Percentage must be between 0 and 1"
-            indexes = np.zeros((len(self)))
-            for idx in np.random.choice(np.arange(len(self)),size=int(len(self)*percentage),replace=False):
-                indexes[idx] = 1
-            idxs.append(np.where(indexes.astype(np.bool))[0])
 
         if positions is not None:
             # This code uses bitwise operations to maximize speed.
@@ -364,9 +361,20 @@ class Protein_Landscape():
                 working = np.logical_and(temp,np.logical_not(self.sequence_mutation_locations[:,pos]))
             idxs.append(np.where(working)[0])
 
+        if len(idxs) > 0:
+            idxs = reduce(np.intersect1d, idxs)
+        else:
+            idxs = np.array(range(len(self)))
+
+        if percentage is not None:
+            assert 0 <= percentage <= 1, "Percentage must be between 0 and 1"
+            indexes = np.zeros((len(idxs)),dtype=bool)
+            indexes[np.random.choice(np.arange(len(idxs)),size=int(len(idxs)*percentage),replace=False)] = 1
+            return idxs[indexes]
+
         assert len(idxs) != 0, "No possible valid indices have been provided."
 
-        return reduce(np.intersect1d, idxs)
+        return idxs
 
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
