@@ -317,6 +317,54 @@ class Protein_Landscape():
         else:
             return idx
 
+    def indexing(self,distances=None,percentage=None,positions=None):
+        """
+        Function that handles more complex indexing operations, for example wanting
+        to combine multiple distance indexes or asking for a random set of indices of a given
+        length relative to the overall dataset
+
+        Parameters
+        ----------
+        distances : [int], default=None
+
+            A list of integer distances that the dataset will return.
+        """
+        idxs = []
+
+        if distances is not None:
+            if type(distances) == int:
+                distances = [distances]
+            assert type(distances) == list, "Distances must be provided as integer or list"
+            for d in distances:
+                assert d in self.d_data.keys(), f"{d} is not a valid distance"
+            # Uses reduce from functools package and the union1d operation
+            # to recursively combine the indexing arrays.
+            idxs.append(reduce(np.union1d, [self.d_data[d] for d in distances]))
+
+        if percentage is not None:
+            assert 0 <= percentage <= 1, "Percentage must be between 0 and 1"
+            indexes = np.zeros((len(self)))
+            for idx in np.random.choice(np.arange(len(self)),size=int(len(self)*percentage),replace=False):
+                indexes[idx] = 1
+            idxs.append(np.where(indexes.astype(np.bool))[0])
+
+        if positions is not None:
+            # This code uses bitwise operations to maximize speed.
+            # It first uses an or gate to collect every one where the desired position was modified
+            # It then goes through each position that shouldn't be changed, and uses three logic gates
+            # to switch ones where they're both on to off, returning the indexes of strings where ONLY
+            # the desired positions are changed
+            not_positions = [x for x in range(len(self.seed_seq)) if x not in positions]
+            working = reduce(np.logical_or,[self.sequence_mutation_locations[:,pos] for pos in positions])
+            for pos in not_positions:
+                temp = np.logical_xor(working,self.sequence_mutation_locations[:,pos])
+                working = np.logical_and(temp,np.logical_not(self.sequence_mutation_locations[:,pos]))
+            idxs.append(np.where(working)[0])
+
+        assert len(idxs) != 0, "No possible valid indices have been provided."
+
+        return reduce(np.intersect1d, idxs)
+
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
 
@@ -817,49 +865,6 @@ class Protein_Landscape():
         """
         minima, maxima = self.calculate_num_extrema(idxs=idxs)
         return (minima+maxima)/sum(idxs)
-
-    def indexing(self,distances=None,percentage=None,positions=None):
-        """
-        Function that handles more complex indexing operations, for example wanting
-        to combine multiple distance indexes or asking for a random set of indices of a given
-        length relative to the overall dataset
-
-        Parameters
-        ----------
-        distances : [int], default=None
-
-            A list of integer distances that the dataset will return.
-        """
-        if distances is not None:
-            if type(distances) == int:
-                distances = [distances]
-            assert type(distances) == list, "Distances must be provided as integer or list"
-            for d in distances:
-                assert d in self.d_data.keys(), f"{d} is not a valid distance"
-            # Uses reduce from functools package and the union1d operation
-            # to recursively combine the indexing arrays.
-            return reduce(np.union1d, [self.d_data[d] for d in distances])
-
-        if percentage is not None:
-            assert 0 <= percentage <= 1, "Percentage must be between 0 and 1"
-            idxs = np.zeros((len(self)))
-            for idx in np.random.choice(np.arange(len(self)),size=int(len(self)*percentage),replace=False):
-                idxs[idx] = 1
-            return idxs.astype(np.bool)
-
-        if positions is not None:
-            # This code uses bitwise operations to maximize speed.
-            # It first uses an or gate to collect every one where the desired position was modified
-            # It then goes through each position that shouldn't be changed, and uses three logic gates
-            # to switch ones where they're both on to off, returning the indexes of strings where ONLY
-            # the desired positions are changed
-            not_positions = [x for x in range(len(self.seed_seq)) if x not in positions]
-            working = reduce(np.logical_or,[self.sequence_mutation_locations[:,pos] for pos in positions])
-            for pos in not_positions:
-                temp = np.logical_xor(working,self.sequence_mutation_locations[:,pos])
-                working = np.logical_and(temp,np.logical_not(self.sequence_mutation_locations[:,pos]))
-            return working
-
 
     def rs_ruggedness(self, log_transform=False, distance=None, split=1.0):
         """
