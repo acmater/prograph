@@ -303,6 +303,10 @@ class Protein_Landscape():
             assert sequence in range(len(self)), "Index exceeds bounds of dataset"
             idx = sequence
 
+        elif type(sequence) == np.int64:
+            assert sequence in range(len(self)), "Index exceeds bounds of dataset"
+            idx = sequence
+
         else:
             raise ValueError("Input format not understood")
 
@@ -675,7 +679,7 @@ class Protein_Landscape():
             actual_neighbours = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
-            actual_neighbours = np.where(self.hamming_array(self.query(seq)) == 1)[0]
+            actual_neighbours = np.where(self.hamming_array(self.query(seq),idxs=token_dict.keys()) == 1)[0]
 
         return seq, actual_neighbours
 
@@ -705,16 +709,17 @@ class Protein_Landscape():
             print("Building Protein Graph for entire dataset")
             token_dict = self.token_dict
             pool = mp.Pool(mp.cpu_count())
+            indexes = range(len(self))
 
-        else: # Check to see if this still works
+        else:
             print("Building Protein Graph For subset of length {}".format(sum(idxs)))
-            dataset = self.tokenized[:,:-1][idxs]
-            integer_indexes = np.where(idxs)[0]
-            token_dict = {key : value for key,value in self.token_dict.items() if value in integer_indexes}
-            if len(integer_indexes) < 100000:
+            dataset = self.tokenized[idxs,:-1]
+            token_dict = {key : value for key,value in self.token_dict.items() if value in idxs}
+            if len(idxs) < 100000:
                 pool = mp.Pool(4)
             else:
                 pool = mp.Pool(mp.cpu_count())
+            indexes = [x for x in idxs]
 
         # This section roughly estimates the cost of the two different approaches to calculating the graph
         # representation of the dataset, and determines which to use based around whichever will result in
@@ -728,8 +733,10 @@ class Protein_Landscape():
         else:
             explicit_neighbours=True
 
+        print(explicit_neighbours)
+
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours)
-        results = pool.map(mapfunc,tqdm.tqdm(range(len(self))))
+        results = pool.map(mapfunc,tqdm.tqdm(indexes))
         neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
                                     "string"      : self.sequences[idx],
                                     "fitness"       : self.fitnesses[idx],
