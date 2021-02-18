@@ -290,23 +290,24 @@ class Protein_Landscape():
             Whether or not to return the information rich form of the protein, i.e
             its multiple representations, label, and neighbours (leverages the graph object)
         """
-        if type(sequence) == str:
-            assert sequence in self.sequences,"This sequence is not in the dataset"
-            idx = int(np.where(self.sequences == sequence)[0])
 
-        elif type(sequence) == tuple:
-            assert len(sequence) == len(self.seed()), "Tuple not valid length for dataset"
-            check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
-            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
-            idx = int(check)
-
-        elif type(sequence) == int or isinstance(sequence, np.integer):
+        if type(sequence) == int or isinstance(sequence, np.integer):
             assert sequence in range(len(self)), "Index exceeds bounds of dataset"
             idx = sequence
 
         elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
             assert isinstance(sequence[0], np.integer) or isinstance(sequence[0], int), "Wrong data format in numpy array or list iterable"
             idx      = sequence
+
+        elif type(sequence) == str:
+                    assert sequence in self.sequences,"This sequence is not in the dataset"
+                    idx = int(np.where(self.sequences == sequence)[0])
+
+        elif type(sequence) == tuple:
+            assert len(sequence) == len(self.seed()), "Tuple not valid length for dataset"
+            check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
+            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
+            idx = int(check)
 
         else:
             raise ValueError("Input format not understood")
@@ -713,7 +714,7 @@ class Protein_Landscape():
         self.__dict__ = pickle.loads(dataPickle)
         return True
 
-    def generate_mutations(self,seq):
+    def generate_mutations(self,seq,bypass=False):
         """
         Takes a sequence and generates all possible mutants 1 Hamming distance away
         using array substitution
@@ -724,6 +725,10 @@ class Protein_Landscape():
 
             Tokenized sequence array
         """
+        if bypass:
+            seq = self.tokenized[seq,:-1]
+        else:
+            seq = self.tokenized[self.query(seq),:-1]
         seed = self.seed()
         hold_array = np.zeros(((len(seed)*len(self.amino_acids)),len(seed)))
         for i,char in enumerate(seq):
@@ -738,7 +743,7 @@ class Protein_Landscape():
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True,idxs=None):
+    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True,idxs=None,bypass=False):
         """
         Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
 
@@ -770,7 +775,7 @@ class Protein_Landscape():
             token_dict = self.token_dict
 
         if explicit_neighbours:
-            possible_neighbours = self.generate_mutations(self.tokenized[self.query(seq),:-1])
+            possible_neighbours = self.generate_mutations(seq,bypass=bypass)
             actual_neighbours = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
@@ -779,7 +784,7 @@ class Protein_Landscape():
         return seq, actual_neighbours
 
     # Graph Section
-    def build_graph(self,idxs=None):
+    def build_graph(self,idxs=None,single_thread=False):
         """
         Efficiently builds the graph of the protein landscape. There are two ways to build
         graphs for protein networks. The first considers the entire data sequence and calculates
@@ -800,6 +805,7 @@ class Protein_Landscape():
             An array of integers that are used to index the complete dataset
             and provide a subset to construct a subgraph of the full dataset.
         """
+
         if idxs is None:
             print("Building Protein Graph for entire dataset")
             token_dict = self.token_dict
@@ -823,12 +829,12 @@ class Protein_Landscape():
         calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed()) * len(self)
         calculating_implicit_neighbours = len(self) ** 2
 
-        if calculating_explicit_neighbours >= calculating_implicit_neighbours:
+        if calculating_explicit_neighbours >= 10*calculating_implicit_neighbours:
             explicit_neighbours=False
         else:
             explicit_neighbours=True
 
-        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
+        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes,bypass=True)
         results = pool.map(mapfunc,tqdm.tqdm(indexes))
         neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
                                     "string"      : self.sequences[idx],
@@ -1278,7 +1284,7 @@ class Protein_Landscape():
     ############################ Machine Learning ##############################
     ############################################################################
 
-    def fit(self, model, model_args, **kwargs):
+    def fit(self, model, model_args, save_model=False,**kwargs):
         """
         Uses ths sklearn syntax to fit the data to model that is provided as a few arguments.
 
@@ -1290,6 +1296,10 @@ class Protein_Landscape():
 
             Arguments that will be unpacked when the model is instantiated.
 
+        save_model : bool, default=False
+
+            The boolean value for whether or not the model will be saved to self.learner
+
         kwargs : {keyword : argument}
 
             Arguments that will be provided to sklearn_data to perform the necessary splits
@@ -1297,13 +1307,16 @@ class Protein_Landscape():
         x_train, y_train, x_test, y_test = self.sklearn_data(**kwargs)
         print(len(x_train))
         model = model(**model_args)
+        if model.__class__.__name__ == "NeuralNetRegressor":
+            y_train, y_test = y_train.reshape(-1,1), y_test.reshape(-1,1)
         print(f"Training model {model}")
         model.fit(x_train, y_train)
         train_score = model.score(x_train, y_train)
         print(f"Model score on training data: {train_score}")
         test_score = model.score(x_test, y_test)
-        print(f"Score of {model} on training and testing data is {test_score}")
-        self.learners[f"{model}"] = model
+        print(f"Score of {model} on testing data is {test_score}")
+        if save_model:
+            self.learners[f"{model}"] = model
         return train_score, test_score
 
 if __name__ == "__main__":
