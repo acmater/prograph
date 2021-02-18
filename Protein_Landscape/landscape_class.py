@@ -7,7 +7,6 @@ import pickle
 import tqdm as tqdm
 import networkx as nx
 import multiprocessing as mp
-from utils.array_manipulation import collapse_concat
 from functools import partial, reduce
 from utils.dataset import Dataset
 import torch
@@ -344,7 +343,7 @@ class Protein_Landscape():
 
                 Any of the valid query inputs that select a single string. This will be used
                 to calculate all relative positions and distances.
-                
+
         distances : [int], default=None
 
             A list of integer distances that the dataset will return.
