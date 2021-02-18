@@ -340,6 +340,11 @@ class Protein_Landscape():
 
         Parameters
         ----------
+        reference_seq : int, str, tuple
+
+                Any of the valid query inputs that select a single string. This will be used
+                to calculate all relative positions and distances.
+                
         distances : [int], default=None
 
             A list of integer distances that the dataset will return.
@@ -358,7 +363,7 @@ class Protein_Landscape():
             reference_seq   = self.seed_seq
             d_data          = self.d_data
         else:
-            d_data =        gen_d_data(self.query(reference_seq))
+            d_data          = self.gen_d_data(self.query(reference_seq))
 
         if distances is not None:
             if type(distances) == int:
@@ -376,7 +381,7 @@ class Protein_Landscape():
             # It then goes through each position that shouldn't be changed, and uses three logic gates
             # to switch ones where they're both on to off, returning the indexes of strings where ONLY
             # the desired positions are changed
-            not_positions = [x for x in range(len(reference_seq)) if x not in positions]
+            not_positions = [x for x in range(len(self[reference_seq][0])) if x not in positions]
             sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
             working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
             for pos in not_positions:

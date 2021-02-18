@@ -91,6 +91,8 @@ class TestIndexingOperations(unittest.TestCase):
         with self.assertRaises(AssertionError):
             landscape.indexing(distances=[1,2,4])
         assert len(landscape.indexing(distances=[1,3])) == 756
+    def test_distance_reference_indexing(self):
+        assert landscape[landscape.indexing(reference_seq="LDC",positions=[1])][3][0] == "LFC", "Reference indexing not working correctly."
 
 if __name__ == "__main__":
     unittest.main()
