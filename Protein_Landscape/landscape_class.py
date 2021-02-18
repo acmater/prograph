@@ -327,7 +327,7 @@ class Protein_Landscape():
     def distances(self,distances):
         return self.indexing(distances=distances)
 
-    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None):
+    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None,Bool="or"):
         """
         Function that handles more complex indexing operations, for example wanting
         to combine multiple distance indexes or asking for a random set of indices of a given
@@ -355,8 +355,14 @@ class Protein_Landscape():
         percentage : float, default=None, 0 <= split_point <= 1
 
             Will return a fraction of the data.
+
+        Bool : str, default = "or", "or"/"and"
+
+            A boolean switch that changes the logic used to combine mutated positions.
         """
         idxs = []
+
+        assert Bool == "or" or Bool == "and", "Not a valid boolean value."
 
         if reference_seq is None:
             reference_seq   = self.seed_seq
@@ -382,7 +388,10 @@ class Protein_Landscape():
             # the desired positions are changed
             not_positions = [x for x in range(len(self[reference_seq][0])) if x not in positions]
             sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
-            working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
+            if Bool == "or":
+                working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
+            else:
+                working = reduce(np.logical_and,[sequence_mutation_locations[:,pos] for pos in positions])
             for pos in not_positions:
                 temp = np.logical_xor(working,sequence_mutation_locations[:,pos])
                 working = np.logical_and(temp,np.logical_not(sequence_mutation_locations[:,pos]))
