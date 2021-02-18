@@ -940,7 +940,6 @@ class Protein_Landscape():
         else:
             return copy.copy(self.tokenized)
 
-
     def tokenize_data(self):
         """
         Takes an iterable of sequences provided as one amino acid strings and returns
@@ -952,7 +951,7 @@ class Protein_Landscape():
         tokens = self.tokens
         return np.array([[tokens[aa] for aa in seq] for seq in self.sequences])
 
-    def sklearn_data(self, data=None,distance=None,positions=None,split=0.8,shuffle=True):
+    def sklearn_data(self, data=None,idxs=None,split=0.8,shuffle=True):
         """
         Parameters
         ----------
@@ -990,14 +989,8 @@ class Protein_Landscape():
 
         if data is not None:
             data = data
-        elif distance:
-            if type(distance) == int:
-                data = copy.copy(self.tokenized[self.get_distance(distance)])
-            else:
-                data = collapse_concat([copy.copy(self.tokenized[self.get_distance(d)]) for d in distance])
-
-        elif positions is not None:
-            data = copy.copy(self.tokenized[self.get_mutated_positions(positions)])
+        elif idxs is not None:
+            data = copy.copy(self.tokenized[idxs])
         else:
             data = copy.copy(self.tokenized)
 
@@ -1006,16 +999,11 @@ class Protein_Landscape():
 
         split_point = int(len(data)*split)
 
-        train = data[:split_point]
-        test  = data[split_point:]
+        # Y data selects only the last column of Data, X selects the rest
+        train, test = data[:split_point], data[split_point:]
 
-        # Y data selects only the last column of Data
-        # X selects the rest
-
-        x_train = train[:,:-1]
-        y_train = train[:,-1]
-        x_test  = test[:,:-1]
-        y_test  = test[:,-1]
+        x_train, x_test = train[:,:-1], test[:,:-1]
+        y_train, y_test = train[:,-1], test[:,-1]
 
         return x_train.astype("int"), y_train.astype("float"), \
                x_test.astype("int"), y_test.astype("float")
@@ -1301,7 +1289,7 @@ class Protein_Landscape():
         test_score = model.score(x_test, y_test)
         print(f"Score of {model} on training and testing data is {test_score}")
         self.learners[f"{model}"] = model
-        return None
+        return train_score, test_score
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
