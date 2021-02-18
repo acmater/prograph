@@ -205,7 +205,7 @@ class Protein_Landscape():
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
 
         self.mutated_positions = self.calc_mutated_positions()
-        self.sequence_mutation_locations = self.boolean_mutant_array()
+        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed_seq)
         # Stratifies data into different hamming distances
 
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
@@ -322,7 +322,13 @@ class Protein_Landscape():
         else:
             return idx
 
-    def indexing(self,distances=None,percentage=None,positions=None):
+    def positions(self,positions):
+        return self.indexing(positions=positions)
+
+    def distances(self,distances):
+        return self.indexing(distances=distances)
+
+    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None):
         """
         Function that handles more complex indexing operations, for example wanting
         to combine multiple distance indexes or asking for a random set of indices of a given
@@ -348,15 +354,21 @@ class Protein_Landscape():
         """
         idxs = []
 
+        if reference_seq is None:
+            reference_seq   = self.seed_seq
+            d_data          = self.d_data
+        else:
+            d_data =        gen_d_data(self.query(reference_seq))
+
         if distances is not None:
             if type(distances) == int:
                 distances = [distances]
             assert type(distances) == list, "Distances must be provided as integer or list"
             for d in distances:
-                assert d in self.d_data.keys(), f"{d} is not a valid distance"
+                assert d in d_data.keys(), f"{d} is not a valid distance"
             # Uses reduce from functools package and the union1d operation
             # to recursively combine the indexing arrays.
-            idxs.append(reduce(np.union1d, [self.d_data[d] for d in distances]))
+            idxs.append(reduce(np.union1d, [d_data[d] for d in distances]))
 
         if positions is not None:
             # This code uses bitwise operations to maximize speed.
@@ -364,11 +376,12 @@ class Protein_Landscape():
             # It then goes through each position that shouldn't be changed, and uses three logic gates
             # to switch ones where they're both on to off, returning the indexes of strings where ONLY
             # the desired positions are changed
-            not_positions = [x for x in range(len(self.seed_seq)) if x not in positions]
-            working = reduce(np.logical_or,[self.sequence_mutation_locations[:,pos] for pos in positions])
+            not_positions = [x for x in range(len(reference_seq)) if x not in positions]
+            sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
+            working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
             for pos in not_positions:
-                temp = np.logical_xor(working,self.sequence_mutation_locations[:,pos])
-                working = np.logical_and(temp,np.logical_not(self.sequence_mutation_locations[:,pos]))
+                temp = np.logical_xor(working,sequence_mutation_locations[:,pos])
+                working = np.logical_and(temp,np.logical_not(sequence_mutation_locations[:,pos]))
             idxs.append(np.where(working)[0])
 
         if len(idxs) > 0:
@@ -549,8 +562,8 @@ class Protein_Landscape():
         """
         return [self.tokens[aa] for aa in seq]
 
-    def boolean_mutant_array(self):
-        return np.invert(self.tokenized[:,:-1] == self.tokenize(self.seed_seq))
+    def boolean_mutant_array(self,seq=None):
+        return np.invert(self.tokenized[:,:-1] == self.tokenized[self.query(seq),:-1])
 
     def calc_mutated_positions(self):
         """
@@ -1100,19 +1113,9 @@ class Protein_Landscape():
             stored_data = self.data
 
         if idxs is not None:
-            data = stored_data[idxs]
-
-        elif distance:
-            if type(distance) == int:
-                data = stored_data[self.get_distance(distance)]
-            else:
-                data = collapse_concat([stored_data[self.get_distance(d)] for d in distance])
-
-        elif positions is not None:
-            data = stored_data[self.get_mutated_positions(positions)]
-
+            data = copy.copy(stored_data[idxs])
         else:
-            data = stored_data
+            data = copy.copy(stored_data)
 
         if unsupervised:
             labels = {torch.Tensor(x[:-1].astype('int8')).long() : real_label for x in data}
@@ -1221,7 +1224,6 @@ class Protein_Landscape():
             state = np.random.choice([state, idx], p = mc_criterion(labels[state],labels[idx],T))
             idxs.append(state)
         return idxs
-
 
     def random_walk_data(self,T=10000,
                               **kwargs):

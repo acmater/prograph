@@ -60,15 +60,15 @@ class TestPyTorchDataLoaders(unittest.TestCase):
         assert len(next(iter(test))[0]) == 2, "Failed to generate dataloaders when particular indices are provided"
 
     def test_pytorch_dataloader_distances(self):
-        train_dl, test_dl = landscape.pytorch_dataloaders(distance=1)
+        train_dl, test_dl = landscape.pytorch_dataloaders(idxs=landscape.indexing(distances=1))
         assert len(next(iter(test_dl))[0]) == 6, "Failed to generate dataloaders for a single distance"
 
     def test_pytorch_dataloader_multiple_distances(self):
-        train_dl, test_dl = landscape.pytorch_dataloaders(distance=[1,2])
+        train_dl, test_dl = landscape.pytorch_dataloaders(idxs=landscape.indexing(distances=[1,2]))
         assert len(next(iter(test_dl))[0]) == 54, "Failed to generate dataloaders for multiple distances"
 
     def test_pytorch_dataloader_positions(self):
-        train_dl, test_dl = landscape.pytorch_dataloaders(positions=[1,2])
+        train_dl, test_dl = landscape.pytorch_dataloaders(idxs=landscape.indexing(positions=[1,2]))
         assert len(next(iter(test_dl))[0]) == 20, "Failed to generate dataloaders for particular positions"
 
     def test_pytorch_dataloader_unsupervised(self):
