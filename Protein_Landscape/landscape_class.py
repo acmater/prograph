@@ -140,7 +140,7 @@ class Protein_Landscape():
         The floating point ruggedness of the landscape calculated as the normalized
         number of maxima and minima.
 
-    Written by Adam Mater, last revision 15.2.21
+    Written by Adam Mater, last revision 18.2.21
     """
 
     def __init__(self,data=None,
@@ -228,6 +228,8 @@ class Protein_Landscape():
             self.num_minima,self.num_maxima = self.calculate_num_extrema()
             self.extrema_ruggedness = self.calc_extrema_ruggedness()
             self.linear_slope, self.linear_RMSE, self.RS_ruggedness = self.rs_ruggedness()
+
+        self.learners = {}
 
         print(self)
 
@@ -324,13 +326,21 @@ class Protein_Landscape():
         """
         Function that handles more complex indexing operations, for example wanting
         to combine multiple distance indexes or asking for a random set of indices of a given
-        length relative to the overall dataset
+        length relative to the overall dataset.
+
+        An important note is that percentage works after distances and positions have been applied.
+        Meaning that it will reduce the index array provided by those two operations first, rather
+        than providing a subset of the data to distances and positions.
 
         Parameters
         ----------
         distances : [int], default=None
 
             A list of integer distances that the dataset will return.
+
+        positions : [int], default=None
+
+            The mutated positions that you want to manually inspect
 
         percentage : float, default=None, 0 <= split_point <= 1
 
@@ -1260,6 +1270,38 @@ class Protein_Landscape():
 
         idxs = reduce(np.union1d,[d_data[d] for d in range(1,max_distance+1)])
         return idxs
+
+    ############################################################################
+    ############################ Machine Learning ##############################
+    ############################################################################
+
+    def fit(self, model, model_args, **kwargs):
+        """
+        Uses ths sklearn syntax to fit the data to model that is provided as a few arguments.
+
+        Parameters
+        ----------
+        model : sklearn or skorch model architecture.
+
+        model_args : {keyword : argument}
+
+            Arguments that will be unpacked when the model is instantiated.
+
+        kwargs : {keyword : argument}
+
+            Arguments that will be provided to sklearn_data to perform the necessary splits
+        """
+        x_train, y_train, x_test, y_test = self.sklearn_data(**kwargs)
+        print(len(x_train))
+        model = model(**model_args)
+        print(f"Training model {model}")
+        model.fit(x_train, y_train)
+        train_score = model.score(x_train, y_train)
+        print(f"Model score on training data: {train_score}")
+        test_score = model.score(x_test, y_test)
+        print(f"Score of {model} on training and testing data is {test_score}")
+        self.learners[f"{model}"] = model
+        return None
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
