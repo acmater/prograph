@@ -160,7 +160,6 @@ class Protein_Landscape():
                 self.load(saved_file)
                 return None
             except:
-                "File could not be loaded"
                 raise Exception.FileNotFoundError("File could not be opened")
 
         if (not data and not csv_path):
