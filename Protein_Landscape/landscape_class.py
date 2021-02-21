@@ -401,6 +401,9 @@ class Protein_Landscape():
         else:
             return idxs
 
+    def neighbours(self, seq):
+        return self[self.graph[self.query(seq)]["neighbours"]]
+
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
 
@@ -760,7 +763,6 @@ class Protein_Landscape():
     ############################################################################
     ################### Data Manipulation and Slicing ##########################
     ############################################################################
-
 
     def get_data(self,tokenized=False):
         """
