@@ -399,6 +399,12 @@ class Protein_Landscape():
     def neighbours(self, seq):
         return self[self.graph[self.query(seq)]["neighbours"]]
 
+    def sequences(self):
+        return [prot["seq"] for prot in self.graph.values()]
+
+    def fitnesses(self):
+        return np.array([prot["fitness"] for prot in self.graph.values()])
+
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
 
