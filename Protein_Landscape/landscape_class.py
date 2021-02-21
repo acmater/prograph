@@ -165,6 +165,8 @@ class Protein_Landscape():
 
         sequences            = data[:,0]
         fitnesses            = data[:,1]
+        self.graph = [Protein(seq) for seq in sequences]
+        self.update_graph(fitnesses,"fitness")
         self.seq_idxs        = {seq : idx for idx, seq in enumerate(sequences)}
         self.len             = len(sequences)
 
@@ -177,7 +179,7 @@ class Protein_Landscape():
 
         self.seq_len     = len(self.seed_seq)
         self.tokenized = np.concatenate((self.tokenize_data(sequences),fitnesses.reshape(-1,1)),axis=1)
-
+        self.update_graph([tuple(x) for x in self.tokenized[:,:-1]],"tokenized")
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
 
         self.mutated_positions = self.calc_mutated_positions()
@@ -190,7 +192,7 @@ class Protein_Landscape():
         self.d_data = self.gen_d_data()
 
         if self.gen_graph:
-            self.graph = self.build_graph(sequences, fitnesses)
+            self.update_graph(self.build_graph(sequences, fitnesses),"neighbours")
 
         self.learners = {}
 
@@ -198,6 +200,11 @@ class Protein_Landscape():
 
     def seed(self):
         return self.seed_seq
+
+    def update_graph(self, data, label):
+        for idx,protein in enumerate(self.graph):
+            setattr(protein, label, data[idx])
+        return None
 
     def __str__(self):
         # TODO Change print formatting for seed sequence so it doesn't look bad
@@ -382,13 +389,15 @@ class Protein_Landscape():
 
     def neighbours(self, seq, keys=[["seq"]]):
         return self[self.graph[self.query(seq)]["neighbours"]]
-        return data["seqs"]
 
     def sequences(self):
         return [prot["seq"] for prot in self.graph.values()]
 
     def fitnesses(self):
         return np.array([prot["fitness"] for prot in self.graph.values()])
+
+    def data(self):
+        return np.array([prot[["seq","fitness"]] for prot in self.graph.values()])
 
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
@@ -724,12 +733,8 @@ class Protein_Landscape():
             explicit_neighbours=True
 
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
-        results = pool.map(mapfunc,tqdm.tqdm(indexes))
-        graph = {idx :        Protein(sequences[idx],
-                                      fitnesses[idx],
-                                      tuple(self.tokenized[idx,:-1]),
-                                      neighbours) for idx, neighbours in results}
-        return graph
+        neighbours = pool.map(mapfunc,tqdm.tqdm(indexes))
+        return neighbours
 
     def graph_to_networkx(self):
         """

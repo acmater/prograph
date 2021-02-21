@@ -1,4 +1,6 @@
-class Protein():
+import collections
+
+class Protein(dict):
     """
     Python class which handles instances of individual proteins. Protein is
     initialized with a variety of properties and utilises dictionary type syntaxing
@@ -19,10 +21,11 @@ class Protein():
         tokenized ='{self.tokenized}',
         neighbours ={self.neighbours}"""
 
-    def __getitem__(self,idx):
-        if isinstance(idx, list):
-            return tuple([self.__dict__[x] for x in idx])
-        return self.__dict__[idx]
+    def __getitem__(self,keys):
+        if isinstance(keys, list):
+            # customized behaviour to allow user to specify tuple of keys
+            return tuple([self.__dict__[x] for x in keys])
+        return self.__dict__[keys]
 
 if __name__ == "__main__":
     a = Protein("AAC")
