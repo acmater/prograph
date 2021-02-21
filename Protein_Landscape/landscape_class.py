@@ -18,6 +18,8 @@ from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 
+from protein import Protein
+
 class Protein_Landscape():
     """
     Class that handles a protein dataset
@@ -272,7 +274,6 @@ class Protein_Landscape():
             Whether or not to return the information rich form of the protein, i.e
             its multiple representations, label, and neighbours (leverages the graph object)
         """
-
         if isinstance(sequence, int) or isinstance(sequence, np.integer):
             assert sequence <= self.len, "Index exceeds bounds of dataset"
             idx = sequence
