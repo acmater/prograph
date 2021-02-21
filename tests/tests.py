@@ -57,7 +57,7 @@ class TestPyTorchDataLoaders(unittest.TestCase):
         assert len(next(iter(test))[0]) == 200, "Failed to generate dataloaders with default arguments"
 
     def test_pytorch_dataloader_generation_indexing(self):
-        idxs = landscape.evolved_trajectory_data(num_steps=9)
+        idxs = np.arange(10)
         train, test = landscape.pytorch_dataloaders(idxs=idxs)
         assert len(next(iter(test))[0]) == 2, "Failed to generate dataloaders when particular indices are provided"
 
@@ -76,17 +76,6 @@ class TestPyTorchDataLoaders(unittest.TestCase):
     def test_pytorch_dataloader_unsupervised(self):
         train_dl, test_dl = landscape.pytorch_dataloaders(unsupervised=True)
         assert torch.all(0 == next(iter(test_dl))[1]) and len(next(iter(test_dl))[1]) == 200, "Failed to generate correct unsupervised dataloaders"
-
-class TestDataSamplingMethods(unittest.TestCase):
-    def test_deep_sequence_generation(self):
-        idxs = landscape.deep_sequence_data(max_distance=2)
-        assert len(idxs) == 270, "Deep Sequence Sampling now has an error"
-        assert 111 not in idxs, "An amino acid with a distance from 3 is failing"
-    def test_deep_sequence_generation_initial_seq(self):
-        idxs = landscape.deep_sequence_data(initial_seq="CAL",max_distance=1)
-        assert len(idxs) == 27, "Wrong sequence length for deep sampling"
-        assert 9 in idxs, "Not correctly calculating distance of 1 from 'CAL'"
-
 
 class TestIndexingOperations(unittest.TestCase):
     def test_distance_indexing(self):

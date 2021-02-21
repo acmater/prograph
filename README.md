@@ -27,3 +27,5 @@ The package strives to achieve high speeds wherever possible by leveraging numpy
 3. Should I consider updating the array operations to use the cupy package?
 4. Add scaler feature to Sklearn data and by extension, fit.
 5. Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
+
+The system needs to be rebuilt to maximize generalizability, making it work with a wide variety of different systems.

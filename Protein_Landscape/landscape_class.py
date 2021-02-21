@@ -215,19 +215,8 @@ class Protein_Landscape():
 
         # FIX THE CODE BELOW
 
-        if self.gen_graph is False:
-            self.graph = None
-
-            self.num_minima,self.num_maxima = "Not Done", "Not Done"
-            self.extrema_ruggedness = "Not Done"
-            self.linear_slope, self.linear_RMSE, self.RS_ruggedness = "Not Done", "Not Done", "Not Done"
-
-        else:
+        if self.gen_graph:
             self.graph = self.build_graph()
-
-            self.num_minima,self.num_maxima = self.calculate_num_extrema()
-            self.extrema_ruggedness = self.calc_extrema_ruggedness()
-            self.linear_slope, self.linear_RMSE, self.RS_ruggedness = self.rs_ruggedness()
 
         self.learners = {}
 
@@ -245,18 +234,10 @@ class Protein_Landscape():
             Number of Distances : {2}
             Seed Sequence       : {3}
                 Modified positions are shown in green
-            Number of minima : {4}
-            Number of maxima : {5}
-            Normalized Extrema Ruggedness : {6}
-            R/S Ruggedness : {7}
         """.format(len(self),
                    self.max_distance,
                    len(self.d_data),
-                   self.coloured_seed_string(),
-                   self.num_minima,
-                   self.num_maxima,
-                   self.extrema_ruggedness,
-                   self.RS_ruggedness)
+                   self.coloured_seed_string())
 
     def __repr__(self):
         # TODO Finish this
@@ -581,10 +562,21 @@ class Protein_Landscape():
         """
         Simple static method which tokenizes an individual sequence
         """
-        if tokenized=None:
+        if tokenizer == None:
             return [self.tokens[aa] for aa in seq]
         else:
             return "This feature is not ready yet"
+
+    def tokenize_data(self):
+        """
+        Takes an iterable of sequences provided as one amino acid strings and returns
+        an array of their tokenized form.
+
+        Note : The tokenize function is not called and the tokens value is regenerated
+        as it removes a lot of function calls and speeds up the operation significantly.
+        """
+        tokens = self.tokens
+        return np.array([[tokens[aa] for aa in seq] for seq in self.sequences])
 
     def boolean_mutant_array(self,seq=None):
         return np.invert(self.tokenized[:,:-1] == self.tokenized[self.query(seq),:-1])
@@ -624,103 +616,6 @@ class Protein_Landscape():
         modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(leng)]).flatten()
         return (xs, ys, modifiers)
 
-    def lengthen_sequences(self, seq_len, AAs=None, mut_indices=False):
-        """
-        Vectorized function that takes a seq len and randomly inserts the tokenized
-        integers into this new sequence framework with a fixed length.
-
-        Parameters
-        ----------
-        seq_len : int
-
-            Interger that determines how long the new sequences will be.
-
-        AAs : str, default=None
-
-            The string of all possible amino acids that should be considered.
-            If no value is provided, it defaults to the landscapes amino acid
-            list
-
-        mut_indices : Bool
-
-            If you want to specify the indices at which the old sequences will
-            be embedded.
-        """
-
-        if not AAs:
-            AAs = self.amino_acids
-
-        sequences = self.tokenized[:,:-1]
-
-        new = np.random.choice(len(AAs),seq_len)
-
-        lengthened_data = np.zeros((sequences.shape[0],seq_len),dtype=np.int8)
-
-        for i,val in enumerate(new):
-            lengthened_data[:,i] = val
-
-        if mut_indices.__class__.__name__ == "ndarray":
-            assert len(mut_indices) == sequences.shape[1], "The index array must have the same length as the original sequence"
-            idxs = mut_indices
-
-        else:
-            idxs = np.random.choice(seq_len,sequences.shape[1],replace=False)
-
-        for i, idx in enumerate(idxs):
-            lengthened_data[:,idx] = sequences[:,i]
-
-        fitnesses = self.tokenized[:,-1]
-
-        return np.concatenate((lengthened_data,fitnesses.reshape(-1,1)), axis=1 )
-
-    def return_lengthened_data(self,seq_len, AAs=None, mut_indices=False,split=0.8,shuffle=True):
-        """
-        Helper function that passes the result of lengthen sequences to sklearn_data.
-        Argument signature is a combination of self.lengthen_sequences and self.sklearn_data
-        """
-        return self.sklearn_data(data=(self.lengthen_sequences(seq_len,AAs,mut_indices)),split=split,shuffle=shuffle)
-
-    def save(self,name=None,ext=".txt"):
-        """
-        Save function that stores the entire landscape so that it can be reused without
-        having to recompute distances and tokenizations
-
-        Parameters
-        ----------
-        name : str, default=None
-
-            Name that the class will be saved under. If none is provided it defaults
-            to the same name as the csv file provided.
-
-        ext : str, default=".txt"
-
-            Extension that the file will be saved with.
-        """
-        if self.csv_path:
-            directory, file = self.csv_path.rsplit("/",1)
-            directory += "/"
-            if not name:
-                name = file.rsplit(".",1)[0]
-            file = open(directory+name+ext,"wb")
-            file.write(pickle.dumps(self.__dict__))
-            file.close()
-
-    def load(self,name):
-        """
-        Functions that instantiates the landscape from a saved file if one is provided
-
-        Parameters
-        ----------
-        name: str
-
-            Provides the name of the file. MUST contain the extension.
-        """
-        file = open(name,"rb")
-        dataPickle = file.read()
-        file.close()
-
-        self.__dict__ = pickle.loads(dataPickle)
-        return True
 
     def generate_mutations(self,seq):
         """
@@ -863,101 +758,6 @@ class Protein_Landscape():
         self.networkx_graph = g
 
     ############################################################################
-    ######################## Ruggedness Estimation #############################
-    ############################################################################
-
-    # Ruggedness Section
-    def is_extrema(self,idx,graph=None):
-        """
-        Takes the ID of a sequence and determines whether or not it is a maxima given its neighbours
-
-        Parameters:
-        -----------
-        idx : int
-
-            Integer index of the sequence that will be checked as a maxima.
-        """
-        if graph is None:
-            graph = self.graph
-
-        neighbours = graph[idx]["neighbours"]
-        #print(self.fitnesses[neighbours])
-        max_comparisons = np.greater(self.fitnesses[idx],self.fitnesses[neighbours])
-        min_comparisons = np.less(self.fitnesses[idx],self.fitnesses[neighbours])
-        if np.all(max_comparisons):
-            return 1
-        elif np.all(min_comparisons): # Checks to see if the point is a minima
-            return -1
-        else:
-            return 0
-
-    def calculate_num_extrema(self,idxs=None):
-        """
-        Calcaultes the number of maxima across a given dataset or array of indices
-        """
-        if idxs is None:
-            idxs = range(len(self))
-            graph = self.graph
-        else:
-            graph = self.build_graph(idxs=idxs)
-            idxs = np.where(idxs)[0]
-
-        print("Calculating the number of extrema")
-        mapfunc = partial(self.is_extrema, graph=graph)
-        results = np.array(list(map(mapfunc,tqdm.tqdm(idxs))))
-        minima = -1*np.sum(results[results<0])
-        maxima = np.sum(results[results>0])
-        return minima, maxima
-
-    def calc_extrema_ruggedness(self):
-        """
-        Simple function that returns a normalized ruggedness value
-        """
-        ruggedness = (self.num_minima+self.num_maxima)/len(self)
-        return ruggedness
-
-    def extrema_ruggedness_subset(self,idxs):
-        """
-        Function that calculates the extrema ruggedness based on a subset of the
-        full protein graph
-        """
-        minima, maxima = self.calculate_num_extrema(idxs=idxs)
-        return (minima+maxima)/sum(idxs)
-
-    def rs_ruggedness(self, log_transform=False, distance=None, split=1.0):
-        """
-        Returns the rs based ruggedness estimate for the landscape.
-
-        Parameters
-        ----------
-        log_transform : bool, default=False
-
-            Boolean value that determines if the base 10 log transform will be applied.
-            The application of this was suggested in the work by Szengdo
-
-        distance : int, default=None
-
-            Determines the distance for data that will be sampled
-
-        split : float, default=1.0, range [0-1]
-
-            How much of the data is used to determine ruggedness
-        """
-        if distance:
-            x_train, y_train, _, _ = self.sklearn_data(split=split,distance=distance)
-        else:
-            x_train, y_train, _, _ = self.sklearn_data(split=split)
-        if log_transform:
-            y_train = np.log10(y_train)
-
-        lin_model = LinearRegression(n_jobs=mp.cpu_count).fit(x_train,y_train)
-        y_preds = lin_model.predict(x_train)
-        coefs   = lin_model.coef_
-        rmse_predictions = np.sqrt(mean_squared_error(y_train, y_preds))
-        slope = (1/len(self.seed_seq)*sum([abs(i) for i in coefs]))
-        return [slope, rmse_predictions, rmse_predictions/slope]
-
-    ############################################################################
     ################### Data Manipulation and Slicing ##########################
     ############################################################################
 
@@ -976,17 +776,6 @@ class Protein_Landscape():
             return copy.copy(self.data)
         else:
             return copy.copy(self.tokenized)
-
-    def tokenize_data(self):
-        """
-        Takes an iterable of sequences provided as one amino acid strings and returns
-        an array of their tokenized form.
-
-        Note : The tokenize function is not called and the tokens value is regenerated
-        as it removes a lot of function calls and speeds up the operation significantly.
-        """
-        tokens = self.tokens
-        return np.array([[tokens[aa] for aa in seq] for seq in self.sequences])
 
     def sklearn_data(self, data=None,idxs=None,split=0.8,shuffle=True):
         """
@@ -1150,141 +939,6 @@ class Protein_Landscape():
 
         return self.gen_dataloaders(labels=labels, keys=keys, params=params, split_point=split_point)
 
-    def shotgun_data(self,num_samples=1000):
-        """
-        Shotgun data randomly samples the entirety of the dataset
-
-        Parameters
-        ----------
-        num_samples : int, default=1000
-
-            Determines how many datapoints will be sampled
-        """
-        idxs = np.random.choice(len(self), size=(num_samples,))
-        return idxs
-
-    @staticmethod
-    def mc_criterion(state1, state2, T):
-        preference_for_state2 = 1 - (1 / (1 + np.exp((state2 - state1) * 1/T)))
-        return np.array([1-preference_for_state2, preference_for_state2]).reshape(-1,)
-
-    def evolved_trajectory_data(self,initial_seq=None,
-                                     num_steps=1000,
-                                     scaled = True,
-                                     mc_criterion=None,
-                                     T=0.01,
-                                     remove_duplicates=False):
-        """
-        Evolves a trajectory from an initial seed sequence using a Monte Carlo Criterion
-        that can be provided as a generic python function.
-
-        IMPORTANT : It is allowed to sample the same position multiple times,
-        with duplicate entries being removed before the indices are returned.
-
-        Parameters
-        ----------
-        initial_seq : str, default=None
-
-            The initial sequence from which the random walk will begin. If none,
-            will use the seed sequence of the dataset.
-
-        num_steps : int, default=1000
-
-            The number of steps that the algorithm is allowed to take through the
-            graph.
-
-        scaled : Bool, default=True
-
-            Whether or not the data should be scaled to be within a range of 0 to 1
-            to remove scale based artefacts of the Monte Carlo Criterion
-
-        mc_criterion : func, default=None
-
-            A Python function to calculate the probability of choosing a new state (state2)
-            over the previous state (state1). Must use the same signature as the
-            mc_criterion static method above
-
-            def mc_criterion(state1 : float32, state2 : float32, T : float32) -> np.array[p(state1),p(state2)]
-
-            The state inputs are the fitness labels assocaiated with the states
-
-        T : float, default=0.01
-
-            A sensitivity (or "temperature") parameter, with lower values increasing the
-            preference for lower energy states, i.e cooling produces a more ordered system.
-
-            Higher temperatures make this procedure analogous to a random walk.
-
-        remove_duplicates : Bool, default=False
-
-            Whether or not to remove duplicate indexes from the list. By default the answer is no.
-
-        Returns
-        -------
-
-        idxs : np.array(num_steps,)
-
-            A numpy array of all indices sampled during the walk.
-        """
-        if scaled:
-            scaler = MinMaxScaler()
-            scaler.fit(self.data[:,-1].reshape(-1,1))
-            labels = scaler.transform(self.data[:,-1].reshape(-1,1))
-        else:
-            labels = self.data[:,-1].reshape(-1,1)
-
-        if initial_seq is not None:
-            initial_seq = self.query(initial_seq)
-        else:
-            initial_seq = self.seed_id
-
-        idxs = [initial_seq]
-        state = initial_seq
-        if mc_criterion is None:
-            mc_criterion = self.mc_criterion
-
-        for i in range(num_steps):
-            idx = random.choice(self.graph[state]["neighbours"]) # Choose random possible neighbour
-            state = np.random.choice([state, idx], p = mc_criterion(labels[state],labels[idx],T))
-            idxs.append(state)
-        return idxs
-
-    def random_walk_data(self,T=10000,
-                              **kwargs):
-        """
-        Helper method that generates a random walk by performing a Monte Carlo
-        walk with a very high temperature. See self.evolved_trajectory_data for
-        complete call signature.
-        """
-        return self.evolved_trajectory_data(T=T,**kwargs)
-
-    def deep_sequence_data(self,initial_seq=None,max_distance=1):
-        """
-        Uses the gen_d_data function to provide all sequences a certain hamming
-        distance away
-
-        Parameters
-        ----------
-        initial_seq : str, default=None
-
-            The initial sequence from which the random walk will begin. If none,
-            will use the seed sequence of the dataset.
-
-        max_distance : int, default=1
-
-            The maximum hamming distance from the central sequence that the data
-            will be extracted from.
-        """
-        if initial_seq is None:
-            initial_seq = tuple(self.tokenize(self.seed_seq))
-            d_data      = self.d_data
-        else:
-            seq         = self.query(initial_seq)
-            d_data      = self.gen_d_data(seq=seq)
-
-        idxs = reduce(np.union1d,[d_data[d] for d in range(1,max_distance+1)])
-        return idxs
-
     ############################################################################
     ############################ Machine Learning ##############################
     ############################################################################
@@ -1323,6 +977,52 @@ class Protein_Landscape():
         if save_model:
             self.learners[f"{model}"] = model
         return train_score, test_score
+
+    ############################################################################
+    ################################ Utilities #################################
+    ############################################################################
+
+        def save(self,name=None,ext=".txt"):
+            """
+            Save function that stores the entire landscape so that it can be reused without
+            having to recompute distances and tokenizations
+
+            Parameters
+            ----------
+            name : str, default=None
+
+                Name that the class will be saved under. If none is provided it defaults
+                to the same name as the csv file provided.
+
+            ext : str, default=".txt"
+
+                Extension that the file will be saved with.
+            """
+            if self.csv_path:
+                directory, file = self.csv_path.rsplit("/",1)
+                directory += "/"
+                if not name:
+                    name = file.rsplit(".",1)[0]
+                file = open(directory+name+ext,"wb")
+                file.write(pickle.dumps(self.__dict__))
+                file.close()
+
+        def load(self,name):
+            """
+            Functions that instantiates the landscape from a saved file if one is provided
+
+            Parameters
+            ----------
+            name: str
+
+                Provides the name of the file. MUST contain the extension.
+            """
+            file = open(name,"rb")
+            dataPickle = file.read()
+            file.close()
+
+            self.__dict__ = pickle.loads(dataPickle)
+            return True
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
