@@ -165,7 +165,7 @@ class Protein_Landscape():
 
         sequences            = data[:,0]
         fitnesses            = data[:,1]
-        self.graph = [Protein(seq) for seq in sequences]
+        self.graph = {idx : Protein(seq) for idx,seq in enumerate(sequences)}
         self.update_graph(fitnesses,"fitness")
         self.seq_idxs        = {seq : idx for idx, seq in enumerate(sequences)}
         self.len             = len(sequences)
@@ -202,7 +202,7 @@ class Protein_Landscape():
         return self.seed_seq
 
     def update_graph(self, data, label):
-        for idx,protein in enumerate(self.graph):
+        for idx, protein in self.graph.items():
             setattr(protein, label, data[idx])
         return None
 
@@ -234,14 +234,11 @@ class Protein_Landscape():
 
     def __getitem__(self,idx):
         if isinstance(idx, np.ndarray) or isinstance(idx, list):
-            return [self.graph[x] for x in self.query(idx)]
+            return {x : self.graph[x] for x in self.query(idx)}
         else:
             return self.graph[self.query(idx)]
 
-    def _iter__(self):
-        return self.graph
-
-    def query(self,sequence,information=False) -> int:
+    def query(self,sequence,information=False):
         """
         Helper function that interprets a query sequence and accepts multiple formats.
         This object works by moving indexes of sequences around due to the large increase
@@ -264,8 +261,12 @@ class Protein_Landscape():
             idx = sequence
 
         elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
-            assert isinstance(sequence[0], np.integer) or isinstance(sequence[0], int), "Wrong data format in numpy array or list iterable"
-            idx = sequence
+            if isinstance(sequence[0], np.integer) or isinstance(sequence[0], int):
+                idx = sequence
+            elif isinstance(sequence[0], str):
+                idx = [self.seq_idxs.get(seq, "This sequence is not in the dataset") for seq in sequence]
+            else:
+                print("Wrong data format in numpy array or list iterable")
 
         elif isinstance(sequence, str):
             idx = self.seq_idxs.get(sequence, "This sequence is not in the dataset")
@@ -390,14 +391,12 @@ class Protein_Landscape():
     def neighbours(self, seq, keys=[["seq"]]):
         return self[self.graph[self.query(seq)]["neighbours"]]
 
-    def sequences(self):
-        return [prot["seq"] for prot in self.graph.values()]
-
-    def fitnesses(self):
-        return np.array([prot["fitness"] for prot in self.graph.values()])
-
-    def data(self):
-        return np.array([prot[["seq","fitness"]] for prot in self.graph.values()])
+    def label_iter(self, label):
+        """
+        Helper function that returns an iterable over a particular label for each
+        Protein
+        """
+        return [protein[label] for protein in self.graph.values()]
 
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
@@ -734,7 +733,7 @@ class Protein_Landscape():
 
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
         neighbours = pool.map(mapfunc,tqdm.tqdm(indexes))
-        return neighbours
+        return [x[1] for x in neighbours] # The indices are stored as the first value of the tuple
 
     def graph_to_networkx(self):
         """

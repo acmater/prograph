@@ -1,6 +1,6 @@
-import collections
+import numpy as np
 
-class Protein(dict):
+class Protein():
     """
     Python class which handles instances of individual proteins. Protein is
     initialized with a variety of properties and utilises dictionary type syntaxing
@@ -16,10 +16,10 @@ class Protein(dict):
         self.neighbours = neighbours
 
     def __repr__(self):
-        return f"""Protein(seq  ='{self.seq}',
-        fitness = {self.fitness},
-        tokenized ='{self.tokenized}',
-        neighbours ={self.neighbours}"""
+        return f"""Protein(seq='{self.seq}',
+        fitness={self.fitness},
+        tokenized={self.tokenized},
+        neighbours=np.array({list(self.neighbours)}))"""
 
     def __getitem__(self,keys):
         if isinstance(keys, list):
