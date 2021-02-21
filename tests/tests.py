@@ -37,6 +37,8 @@ class TestIndexing(unittest.TestCase):
         assert len(landscape.indexing(percentage=0.7)) == 700, "Percentage indexing is not working"
     def test_pos_dist_perc(self):
         assert len(landscape.indexing(positions=[1,2],distances=2,percentage=0.3)) == 24, "All forms of indexing fail when combined"
+    def test_pos_dist_complement(self):
+        assert landscape.indexing(positions=[1,2],distances=2,complement=True)[1][12] == 30, "The Complement Method is failing"
 
 class TestDistanceGeneration(unittest.TestCase):
     def test_get_distance_normal(self):
