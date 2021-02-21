@@ -14,17 +14,17 @@ landscape = Protein_Landscape(csv_path="../Data/Small_NK.csv",gen_graph=True)
 
 class TestQuery(unittest.TestCase):
     def test_string_idx(self):
-        assert landscape["AAC"][0] == "AAC", "String indexing has failed"
+        assert landscape["AAC"]["seq"] == "AAC", "String indexing has failed"
     def test_int_idx(self):
-        assert landscape[26][0] == "ADH", "Integer indexing has failed"
+        assert landscape[26]["seq"] == "ADH", "Integer indexing has failed"
     def test_tuple_idx(self):
-        assert landscape[(0,1,1)][0] == "ACC", "Tuple indexing has failed"
+        assert landscape[(0,1,1)]["seq"] == "ACC", "Tuple indexing has failed"
     def test_len(self):
         assert len(landscape) == 1000, "__getitem__ method is failing"
     def test_list(self):
-        assert landscape[[1,2,4]][2][0] == "AAF", "list indexing has failed"
+        assert landscape[[1,2,4]][2]["seq"] == "AAF", "list indexing has failed"
     def test_array(self):
-        assert landscape[np.array([63,87])][1][0] == "AKI", "numpy array indexing has failed"
+        assert landscape[np.array([63,87])][1]["seq"] == "AKI", "numpy array indexing has failed"
 
 class TestIndexing(unittest.TestCase):
     def test_positions(self):
@@ -46,8 +46,8 @@ class TestDistanceGeneration(unittest.TestCase):
     def test_gen_d_data(self):
         landscape.gen_d_data(seq="ACL")
     def test_get_distance_custom_d_data(self):
-        out = landscape.data[landscape.get_distance(dist=0,d_data=landscape.gen_d_data(seq="ACL"))]
-        assert out[0][0] == 'ACL'
+        out = landscape[landscape.get_distance(dist=0,d_data=landscape.gen_d_data(seq="ACL"))]
+        assert out[0]["seq"] == 'ACL'
     def test_calc_neighnours(self):
         assert np.all(landscape.calc_neighbours(seq="ACL",explicit_neighbours=False)[1] == landscape.calc_neighbours(seq="ACL",explicit_neighbours=True)[1]), "Calc neighbours has an error"
 
@@ -83,7 +83,7 @@ class TestIndexingOperations(unittest.TestCase):
             landscape.indexing(distances=[1,2,4])
         assert len(landscape.indexing(distances=[1,3])) == 756
     def test_distance_reference_indexing(self):
-        assert landscape[landscape.indexing(reference_seq="LDC",positions=[1])][3][0] == "LFC", "Reference indexing not working correctly."
+        assert landscape[landscape.indexing(reference_seq="LDC",positions=[1])][3]["seq"] == "LFC", "Reference indexing not working correctly."
 
 if __name__ == "__main__":
     unittest.main()

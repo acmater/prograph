@@ -18,7 +18,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 
-from protein import Protein
+from .protein import Protein
 
 class Protein_Landscape():
     """
@@ -83,18 +83,10 @@ class Protein_Landscape():
         A dictionary where each distance is a key and the values are the indexes of nodes
         with that distance from the seed sequence
 
-    data : np.array
-
-        Full, untokenized data. Two columns, first is sequences as strings, and second is fitnesses
-
     tokens : {tuple(tokenized_sequence) : index}
 
         A dictionary that stores a tuple format of the tokenized string with the index
         of it within the data array as the value. Used to rapidly perform membership checks
-
-    sequences : np.array(str)
-
-        A numpy array containing all sequences as strings
 
     seed_seq : str
 
@@ -141,7 +133,7 @@ class Protein_Landscape():
         The floating point ruggedness of the landscape calculated as the normalized
         number of maxima and minima.
 
-    Written by Adam Mater, last revision 18.2.21
+    Written by Adam Mater, last revision 21.2.21
     """
 
     def __init__(self,data=None,
@@ -172,37 +164,33 @@ class Protein_Landscape():
                      given higher priority so the data will be overwritten by this
                      if possible""")
             self.csv_path = csv_path
-            self.data = self.csvDataLoader(csv_path,**custom_columns)
+            data = self.csvDataLoader(csv_path,**custom_columns)
 
         elif csv_path:
 
             self.csv_path = csv_path
-            self.data = self.csvDataLoader(csv_path,**custom_columns)
-
-        else:
-            self.data      = data
+            data = self.csvDataLoader(csv_path,**custom_columns)
 
         self.amino_acids     = amino_acids
         self.custom_columns  = custom_columns
         self.gen_graph       = gen_graph
-
         self.tokens      = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
 
-        self.sequences   = self.data[:,0]
-        self.seq_idxs    = {seq : idx for idx, seq in enumerate(self.sequences)}
-        self.fitnesses   = self.data[:,1]
-        self.len         = len(self)
+        sequences   = data[:,0]
+        fitnesses   = data[:,1]
+        self.seq_idxs    = {seq : idx for idx, seq in enumerate(sequences)}
+        self.len         = len(sequences)
 
         if seed_seq:
             self.seed_seq      = seed_seq
 
         else:
             self.seed_id        = seed_id
-            self.seed_seq       = self.sequences[self.seed_id]
+            self.seed_seq       = sequences[self.seed_id]
         self.seq_len     = len(self.seed_seq)
 
 
-        self.tokenized = np.concatenate((self.tokenize_data(),self.fitnesses.reshape(-1,1)),axis=1)
+        self.tokenized = np.concatenate((self.tokenize_data(sequences),fitnesses.reshape(-1,1)),axis=1)
 
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
 
@@ -218,7 +206,7 @@ class Protein_Landscape():
         # FIX THE CODE BELOW
 
         if self.gen_graph:
-            self.graph = self.build_graph()
+            self.graph = self.build_graph(sequences, fitnesses)
 
         self.learners = {}
 
@@ -251,10 +239,16 @@ class Protein_Landscape():
                                   )"""
 
     def __len__(self):
-        return len(self.sequences)
+        return len(self.tokenized)
 
     def __getitem__(self,idx):
-        return self.data[self.query(idx)]
+        if isinstance(idx, np.ndarray) or isinstance(idx, list):
+            return [self.graph[x] for x in self.query(idx)]
+        else:
+            return self.graph[self.query(idx)]
+
+    def _iter__(self):
+        return self.graph
 
     def query(self,sequence,information=False) -> int:
         """
@@ -373,7 +367,7 @@ class Protein_Landscape():
             # It then goes through each position that shouldn't be changed, and uses three logic gates
             # to switch ones where they're both on to off, returning the indexes of strings where ONLY
             # the desired positions are changed
-            not_positions = [x for x in range(len(self[reference_seq][0])) if x not in positions]
+            not_positions = [x for x in range(len(self[reference_seq]["seq"])) if x not in positions]
             sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
             if Bool == "or":
                 working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
@@ -444,7 +438,7 @@ class Protein_Landscape():
             seq = self.seed()
 
         else:
-            seq = self.sequences[self.query(seq)]
+            seq = self.graph[self.query(seq)]["seq"]
 
         subsets = {x : [] for x in range(len(seq)+1)}
 
@@ -571,7 +565,7 @@ class Protein_Landscape():
         else:
             return "This feature is not ready yet"
 
-    def tokenize_data(self):
+    def tokenize_data(self, sequences):
         """
         Takes an iterable of sequences provided as one amino acid strings and returns
         an array of their tokenized form.
@@ -580,7 +574,7 @@ class Protein_Landscape():
         as it removes a lot of function calls and speeds up the operation significantly.
         """
         tokens = self.tokens
-        return np.array([[tokens[aa] for aa in seq] for seq in self.sequences])
+        return np.array([[tokens[aa] for aa in seq] for seq in sequences])
 
     def boolean_mutant_array(self,seq=None):
         return np.invert(self.tokenized[:,:-1] == self.tokenized[self.query(seq),:-1])
@@ -688,7 +682,7 @@ class Protein_Landscape():
         return seq, actual_neighbours
 
     # Graph Section
-    def build_graph(self,idxs=None,single_thread=False):
+    def build_graph(self,sequences, fitnesses,idxs=None,single_thread=False):
         """
         Efficiently builds the graph of the protein landscape. There are two ways to build
         graphs for protein networks. The first considers the entire data sequence and calculates
@@ -740,11 +734,11 @@ class Protein_Landscape():
 
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
         results = pool.map(mapfunc,tqdm.tqdm(indexes))
-        neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
-                                    "string"      : self.sequences[idx],
-                                    "fitness"       : self.fitnesses[idx],
-                                    "neighbours"  : neighbours} for idx, neighbours in results}
-        return neighbours
+        graph = {idx :        Protein(sequences[idx],
+                                      fitnesses[idx],
+                                      tuple(self.tokenized[idx,:-1]),
+                                      neighbours) for idx, neighbours in results}
+        return graph
 
     def graph_to_networkx(self):
         """
@@ -752,9 +746,10 @@ class Protein_Landscape():
         """
         # So the problem here is that I do not know how to stick labels on with the
         # nodes. As a result, cytoscape won't be able to visualize the graphs properly.
+        prots = [prot["seq"] for prot in self.graph]
         g = nx.Graph()
-        g.add_nodes_from(self.sequences)#,attr_dict={"fitness" : self.fitnesses[idx]})
-        for node in tqdm.tqdm(self.sequences):
+        g.add_nodes_from(prots)#,attr_dict={"fitness" : self.fitnesses[idx]})
+        for node in tqdm.tqdm(prots):
             # I could just shift this to an enumerate operation, I just want to be absolutely
             # positive that there is no strange changes to the ordering.
             idx = int(np.where(self.sequences == node)[0])
@@ -776,7 +771,7 @@ class Protein_Landscape():
             Boolean value that determines if the raw or tokenized data will be returned.
         """
         if tokenized:
-            return copy.copy(self.data)
+            return np.array([x[["seq","fitness"]] for x in self.graph])
         else:
             return copy.copy(self.tokenized)
 
