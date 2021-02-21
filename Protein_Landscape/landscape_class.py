@@ -230,7 +230,6 @@ class Protein_Landscape():
             self.linear_slope, self.linear_RMSE, self.RS_ruggedness = self.rs_ruggedness()
 
         self.learners = {}
-        self.context  = "sequences"
 
         print(self)
 
@@ -272,14 +271,7 @@ class Protein_Landscape():
         return len(self.sequences)
 
     def __getitem__(self,idx):
-        if self.context == "sequences":
-            return self.data[self.query(idx)]
-        elif self.context == "tokenized":
-            return self.tokenized[self.query(idx)]
-        elif self.context == "graph":
-            return self.graph[self.query(idx)]
-        else:
-            pass
+        return self.data[self.query(idx)]
 
     def query(self,sequence,information=False) -> int:
         """
@@ -336,7 +328,7 @@ class Protein_Landscape():
     def distances(self,distances):
         return self.indexing(distances=distances)
 
-    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None,Bool="or"):
+    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None,Bool="or",complement=False):
         """
         Function that handles more complex indexing operations, for example wanting
         to combine multiple distance indexes or asking for a random set of indices of a given
@@ -368,6 +360,10 @@ class Protein_Landscape():
         Bool : str, default = "or", "or"/"and"
 
             A boolean switch that changes the logic used to combine mutated positions.
+
+        complement : bool, default=False
+
+            Whether or not the indexes of the complement should also be returned
         """
         idxs = []
 
@@ -419,7 +415,10 @@ class Protein_Landscape():
 
         assert len(idxs) != 0, "No possible valid indices have been provided."
 
-        return idxs
+        if complement:
+            return idxs, np.setdiff1d(np.arange(self.len), idxs)
+        else:
+            return idxs
 
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
@@ -578,11 +577,14 @@ class Protein_Landscape():
 
         return protein_data
 
-    def tokenize(self,seq):
+    def tokenize(self,seq,tokenizer=None):
         """
         Simple static method which tokenizes an individual sequence
         """
-        return [self.tokens[aa] for aa in seq]
+        if tokenized=None:
+            return [self.tokens[aa] for aa in seq]
+        else:
+            return "This feature is not ready yet"
 
     def boolean_mutant_array(self,seq=None):
         return np.invert(self.tokenized[:,:-1] == self.tokenized[self.query(seq),:-1])
