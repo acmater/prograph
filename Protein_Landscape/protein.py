@@ -1,4 +1,9 @@
 class Protein():
+    """
+    Python class which handles instances of individual proteins. Protein is
+    initialized with a variety of properties and utilises dictionary type syntaxing
+    to make it compliant with the remainder of the code.
+    """
     def __init__(self, seq,
                        fitness=None,
                        tokenized=None,

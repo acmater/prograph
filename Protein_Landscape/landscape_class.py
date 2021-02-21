@@ -104,7 +104,7 @@ class Protein_Landscape():
 
         L is sequence length.
 
-    self.hammings : np.array(N,)
+    hammings : np.array(N,)
 
         Numpy array of length number of samples, where each value is the hamming
         distance of the species at that index from the seed sequence.
@@ -119,19 +119,6 @@ class Protein_Landscape():
                     "neighbours" : np.array[idxs] - A numpy array of indexes in the dataset that are neighbours
 
         A memory efficient storage of the graph that can be passed to graph visualisation packages
-
-    num_minima : int
-
-        The number of minima within the dataset
-
-    num_maxima : int
-
-        The number of maxima within the dataset
-
-    extrema_ruggedness : float32
-
-        The floating point ruggedness of the landscape calculated as the normalized
-        number of maxima and minima.
 
     Written by Adam Mater, last revision 21.2.21
     """
@@ -174,12 +161,12 @@ class Protein_Landscape():
         self.amino_acids     = amino_acids
         self.custom_columns  = custom_columns
         self.gen_graph       = gen_graph
-        self.tokens      = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
+        self.tokens          = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
 
-        sequences   = data[:,0]
-        fitnesses   = data[:,1]
-        self.seq_idxs    = {seq : idx for idx, seq in enumerate(sequences)}
-        self.len         = len(sequences)
+        sequences            = data[:,0]
+        fitnesses            = data[:,1]
+        self.seq_idxs        = {seq : idx for idx, seq in enumerate(sequences)}
+        self.len             = len(sequences)
 
         if seed_seq:
             self.seed_seq      = seed_seq
@@ -187,9 +174,8 @@ class Protein_Landscape():
         else:
             self.seed_id        = seed_id
             self.seed_seq       = sequences[self.seed_id]
+
         self.seq_len     = len(self.seed_seq)
-
-
         self.tokenized = np.concatenate((self.tokenize_data(sequences),fitnesses.reshape(-1,1)),axis=1)
 
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
@@ -202,8 +188,6 @@ class Protein_Landscape():
         self.mutation_arrays  = self.gen_mutation_arrays()
 
         self.d_data = self.gen_d_data()
-
-        # FIX THE CODE BELOW
 
         if self.gen_graph:
             self.graph = self.build_graph(sequences, fitnesses)
@@ -396,8 +380,9 @@ class Protein_Landscape():
         else:
             return idxs
 
-    def neighbours(self, seq):
+    def neighbours(self, seq, keys=[["seq"]]):
         return self[self.graph[self.query(seq)]["neighbours"]]
+        return data["seqs"]
 
     def sequences(self):
         return [prot["seq"] for prot in self.graph.values()]
