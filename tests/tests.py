@@ -37,6 +37,8 @@ class TestIndexing(unittest.TestCase):
         assert len(landscape.indexing(percentage=0.7)) == 700, "Percentage indexing is not working"
     def test_pos_dist_perc(self):
         assert len(landscape.indexing(positions=[1,2],distances=2,percentage=0.3)) == 24, "All forms of indexing fail when combined"
+    def test_pos_dist_complement(self):
+        assert landscape.indexing(positions=[1,2],distances=2,complement=True)[1][12] == 30, "The Complement Method is failing"
 
 class TestDistanceGeneration(unittest.TestCase):
     def test_get_distance_normal(self):
@@ -60,15 +62,15 @@ class TestPyTorchDataLoaders(unittest.TestCase):
         assert len(next(iter(test))[0]) == 2, "Failed to generate dataloaders when particular indices are provided"
 
     def test_pytorch_dataloader_distances(self):
-        train_dl, test_dl = landscape.pytorch_dataloaders(distance=1)
+        train_dl, test_dl = landscape.pytorch_dataloaders(idxs=landscape.indexing(distances=1))
         assert len(next(iter(test_dl))[0]) == 6, "Failed to generate dataloaders for a single distance"
 
     def test_pytorch_dataloader_multiple_distances(self):
-        train_dl, test_dl = landscape.pytorch_dataloaders(distance=[1,2])
+        train_dl, test_dl = landscape.pytorch_dataloaders(idxs=landscape.indexing(distances=[1,2]))
         assert len(next(iter(test_dl))[0]) == 54, "Failed to generate dataloaders for multiple distances"
 
     def test_pytorch_dataloader_positions(self):
-        train_dl, test_dl = landscape.pytorch_dataloaders(positions=[1,2])
+        train_dl, test_dl = landscape.pytorch_dataloaders(idxs=landscape.indexing(positions=[1,2]))
         assert len(next(iter(test_dl))[0]) == 20, "Failed to generate dataloaders for particular positions"
 
     def test_pytorch_dataloader_unsupervised(self):
@@ -91,6 +93,8 @@ class TestIndexingOperations(unittest.TestCase):
         with self.assertRaises(AssertionError):
             landscape.indexing(distances=[1,2,4])
         assert len(landscape.indexing(distances=[1,3])) == 756
+    def test_distance_reference_indexing(self):
+        assert landscape[landscape.indexing(reference_seq="LDC",positions=[1])][3][0] == "LFC", "Reference indexing not working correctly."
 
 if __name__ == "__main__":
     unittest.main()

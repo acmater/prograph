@@ -7,7 +7,6 @@ import pickle
 import tqdm as tqdm
 import networkx as nx
 import multiprocessing as mp
-from utils.array_manipulation import collapse_concat
 from functools import partial, reduce
 from utils.dataset import Dataset
 import torch
@@ -140,7 +139,7 @@ class Protein_Landscape():
         The floating point ruggedness of the landscape calculated as the normalized
         number of maxima and minima.
 
-    Written by Adam Mater, last revision 15.2.21
+    Written by Adam Mater, last revision 18.2.21
     """
 
     def __init__(self,data=None,
@@ -161,7 +160,6 @@ class Protein_Landscape():
                 self.load(saved_file)
                 return None
             except:
-                "File could not be loaded"
                 raise Exception.FileNotFoundError("File could not be opened")
 
         if (not data and not csv_path):
@@ -189,7 +187,9 @@ class Protein_Landscape():
         self.tokens      = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
 
         self.sequences   = self.data[:,0]
+        self.seq_idxs    = {seq : idx for idx, seq in enumerate(self.sequences)}
         self.fitnesses   = self.data[:,1]
+        self.len         = len(self)
 
         if seed_seq:
             self.seed_seq      = seed_seq
@@ -197,15 +197,15 @@ class Protein_Landscape():
         else:
             self.seed_id        = seed_id
             self.seed_seq       = self.sequences[self.seed_id]
+        self.seq_len     = len(self.seed_seq)
 
-        seq_len        = len(self.seed_seq)
 
         self.tokenized = np.concatenate((self.tokenize_data(),self.fitnesses.reshape(-1,1)),axis=1)
 
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
 
         self.mutated_positions = self.calc_mutated_positions()
-        self.sequence_mutation_locations = self.boolean_mutant_array()
+        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed_seq)
         # Stratifies data into different hamming distances
 
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
@@ -228,6 +228,9 @@ class Protein_Landscape():
             self.num_minima,self.num_maxima = self.calculate_num_extrema()
             self.extrema_ruggedness = self.calc_extrema_ruggedness()
             self.linear_slope, self.linear_RMSE, self.RS_ruggedness = self.rs_ruggedness()
+
+        self.learners = {}
+        self.context  = "sequences"
 
         print(self)
 
@@ -269,7 +272,14 @@ class Protein_Landscape():
         return len(self.sequences)
 
     def __getitem__(self,idx):
-        return self.data[self.query(idx)]
+        if self.context == "sequences":
+            return self.data[self.query(idx)]
+        elif self.context == "tokenized":
+            return self.tokenized[self.query(idx)]
+        elif self.context == "graph":
+            return self.graph[self.query(idx)]
+        else:
+            pass
 
     def query(self,sequence,information=False) -> int:
         """
@@ -289,23 +299,23 @@ class Protein_Landscape():
             Whether or not to return the information rich form of the protein, i.e
             its multiple representations, label, and neighbours (leverages the graph object)
         """
-        if type(sequence) == str:
-            assert sequence in self.sequences,"This sequence is not in the dataset"
-            idx = int(np.where(self.sequences == sequence)[0])
 
-        elif type(sequence) == tuple:
-            assert len(sequence) == len(self.seed()), "Tuple not valid length for dataset"
-            check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
-            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
-            idx = int(check)
-
-        elif type(sequence) == int or isinstance(sequence, np.integer):
-            assert sequence in range(len(self)), "Index exceeds bounds of dataset"
+        if isinstance(sequence, int) or isinstance(sequence, np.integer):
+            assert sequence <= self.len, "Index exceeds bounds of dataset"
             idx = sequence
 
         elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
             assert isinstance(sequence[0], np.integer) or isinstance(sequence[0], int), "Wrong data format in numpy array or list iterable"
-            idx      = sequence
+            idx = sequence
+
+        elif isinstance(sequence, str):
+            idx = self.seq_idxs.get(sequence, "This sequence is not in the dataset")
+
+        elif isinstance(sequence, tuple):
+            assert len(sequence) == self.seq_len, "Tuple not valid length for dataset"
+            check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
+            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
+            idx = int(check)
 
         else:
             raise ValueError("Input format not understood")
@@ -320,33 +330,64 @@ class Protein_Landscape():
         else:
             return idx
 
-    def indexing(self,distances=None,percentage=None,positions=None):
+    def positions(self,positions):
+        return self.indexing(positions=positions)
+
+    def distances(self,distances):
+        return self.indexing(distances=distances)
+
+    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None,Bool="or"):
         """
         Function that handles more complex indexing operations, for example wanting
         to combine multiple distance indexes or asking for a random set of indices of a given
-        length relative to the overall dataset
+        length relative to the overall dataset.
+
+        An important note is that percentage works after distances and positions have been applied.
+        Meaning that it will reduce the index array provided by those two operations first, rather
+        than providing a subset of the data to distances and positions.
 
         Parameters
         ----------
+        reference_seq : int, str, tuple
+
+                Any of the valid query inputs that select a single string. This will be used
+                to calculate all relative positions and distances.
+
         distances : [int], default=None
 
             A list of integer distances that the dataset will return.
 
+        positions : [int], default=None
+
+            The mutated positions that you want to manually inspect
+
         percentage : float, default=None, 0 <= split_point <= 1
 
             Will return a fraction of the data.
+
+        Bool : str, default = "or", "or"/"and"
+
+            A boolean switch that changes the logic used to combine mutated positions.
         """
         idxs = []
+
+        assert Bool == "or" or Bool == "and", "Not a valid boolean value."
+
+        if reference_seq is None:
+            reference_seq   = self.seed_seq
+            d_data          = self.d_data
+        else:
+            d_data          = self.gen_d_data(self.query(reference_seq))
 
         if distances is not None:
             if type(distances) == int:
                 distances = [distances]
             assert type(distances) == list, "Distances must be provided as integer or list"
             for d in distances:
-                assert d in self.d_data.keys(), f"{d} is not a valid distance"
+                assert d in d_data.keys(), f"{d} is not a valid distance"
             # Uses reduce from functools package and the union1d operation
             # to recursively combine the indexing arrays.
-            idxs.append(reduce(np.union1d, [self.d_data[d] for d in distances]))
+            idxs.append(reduce(np.union1d, [d_data[d] for d in distances]))
 
         if positions is not None:
             # This code uses bitwise operations to maximize speed.
@@ -354,11 +395,15 @@ class Protein_Landscape():
             # It then goes through each position that shouldn't be changed, and uses three logic gates
             # to switch ones where they're both on to off, returning the indexes of strings where ONLY
             # the desired positions are changed
-            not_positions = [x for x in range(len(self.seed_seq)) if x not in positions]
-            working = reduce(np.logical_or,[self.sequence_mutation_locations[:,pos] for pos in positions])
+            not_positions = [x for x in range(len(self[reference_seq][0])) if x not in positions]
+            sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
+            if Bool == "or":
+                working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
+            else:
+                working = reduce(np.logical_and,[sequence_mutation_locations[:,pos] for pos in positions])
             for pos in not_positions:
-                temp = np.logical_xor(working,self.sequence_mutation_locations[:,pos])
-                working = np.logical_and(temp,np.logical_not(self.sequence_mutation_locations[:,pos]))
+                temp = np.logical_xor(working,sequence_mutation_locations[:,pos])
+                working = np.logical_and(temp,np.logical_not(sequence_mutation_locations[:,pos]))
             idxs.append(np.where(working)[0])
 
         if len(idxs) > 0:
@@ -539,8 +584,8 @@ class Protein_Landscape():
         """
         return [self.tokens[aa] for aa in seq]
 
-    def boolean_mutant_array(self):
-        return np.invert(self.tokenized[:,:-1] == self.tokenize(self.seed_seq))
+    def boolean_mutant_array(self,seq=None):
+        return np.invert(self.tokenized[:,:-1] == self.tokenized[self.query(seq),:-1])
 
     def calc_mutated_positions(self):
         """
@@ -569,7 +614,6 @@ class Protein_Landscape():
             else:
                 strs.append("{0}".format(char))
         return "".join(strs)
-
 
     def gen_mutation_arrays(self):
         leng = len(self.seed())
@@ -634,7 +678,6 @@ class Protein_Landscape():
         """
         return self.sklearn_data(data=(self.lengthen_sequences(seq_len,AAs,mut_indices)),split=split,shuffle=shuffle)
 
-
     def save(self,name=None,ext=".txt"):
         """
         Save function that stores the entire landscape so that it can be reused without
@@ -688,6 +731,7 @@ class Protein_Landscape():
 
             Tokenized sequence array
         """
+        seq = self.tokenized[self.query(seq),:-1]
         seed = self.seed()
         hold_array = np.zeros(((len(seed)*len(self.amino_acids)),len(seed)))
         for i,char in enumerate(seq):
@@ -734,7 +778,7 @@ class Protein_Landscape():
             token_dict = self.token_dict
 
         if explicit_neighbours:
-            possible_neighbours = self.generate_mutations(self.tokenized[self.query(seq),:-1])
+            possible_neighbours = self.generate_mutations(seq)
             actual_neighbours = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
@@ -743,7 +787,7 @@ class Protein_Landscape():
         return seq, actual_neighbours
 
     # Graph Section
-    def build_graph(self,idxs=None):
+    def build_graph(self,idxs=None,single_thread=False):
         """
         Efficiently builds the graph of the protein landscape. There are two ways to build
         graphs for protein networks. The first considers the entire data sequence and calculates
@@ -764,6 +808,7 @@ class Protein_Landscape():
             An array of integers that are used to index the complete dataset
             and provide a subset to construct a subgraph of the full dataset.
         """
+
         if idxs is None:
             print("Building Protein Graph for entire dataset")
             token_dict = self.token_dict
@@ -787,7 +832,7 @@ class Protein_Landscape():
         calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed()) * len(self)
         calculating_implicit_neighbours = len(self) ** 2
 
-        if calculating_explicit_neighbours >= calculating_implicit_neighbours:
+        if calculating_explicit_neighbours >= 10*calculating_implicit_neighbours:
             explicit_neighbours=False
         else:
             explicit_neighbours=True
@@ -930,7 +975,6 @@ class Protein_Landscape():
         else:
             return copy.copy(self.tokenized)
 
-
     def tokenize_data(self):
         """
         Takes an iterable of sequences provided as one amino acid strings and returns
@@ -942,7 +986,7 @@ class Protein_Landscape():
         tokens = self.tokens
         return np.array([[tokens[aa] for aa in seq] for seq in self.sequences])
 
-    def sklearn_data(self, data=None,distance=None,positions=None,split=0.8,shuffle=True):
+    def sklearn_data(self, data=None,idxs=None,split=0.8,shuffle=True):
         """
         Parameters
         ----------
@@ -980,14 +1024,8 @@ class Protein_Landscape():
 
         if data is not None:
             data = data
-        elif distance:
-            if type(distance) == int:
-                data = copy.copy(self.tokenized[self.get_distance(distance)])
-            else:
-                data = collapse_concat([copy.copy(self.tokenized[self.get_distance(d)]) for d in distance])
-
-        elif positions is not None:
-            data = copy.copy(self.tokenized[self.get_mutated_positions(positions)])
+        elif idxs is not None:
+            data = copy.copy(self.tokenized[idxs])
         else:
             data = copy.copy(self.tokenized)
 
@@ -996,16 +1034,11 @@ class Protein_Landscape():
 
         split_point = int(len(data)*split)
 
-        train = data[:split_point]
-        test  = data[split_point:]
+        # Y data selects only the last column of Data, X selects the rest
+        train, test = data[:split_point], data[split_point:]
 
-        # Y data selects only the last column of Data
-        # X selects the rest
-
-        x_train = train[:,:-1]
-        y_train = train[:,-1]
-        x_test  = test[:,:-1]
-        y_test  = test[:,-1]
+        x_train, x_test = train[:,:-1], test[:,:-1]
+        y_train, y_test = train[:,-1], test[:,-1]
 
         return x_train.astype("int"), y_train.astype("float"), \
                x_test.astype("int"), y_test.astype("float")
@@ -1102,19 +1135,9 @@ class Protein_Landscape():
             stored_data = self.data
 
         if idxs is not None:
-            data = stored_data[idxs]
-
-        elif distance:
-            if type(distance) == int:
-                data = stored_data[self.get_distance(distance)]
-            else:
-                data = collapse_concat([stored_data[self.get_distance(d)] for d in distance])
-
-        elif positions is not None:
-            data = stored_data[self.get_mutated_positions(positions)]
-
+            data = copy.copy(stored_data[idxs])
         else:
-            data = stored_data
+            data = copy.copy(stored_data)
 
         if unsupervised:
             labels = {torch.Tensor(x[:-1].astype('int8')).long() : real_label for x in data}
@@ -1224,7 +1247,6 @@ class Protein_Landscape():
             idxs.append(state)
         return idxs
 
-
     def random_walk_data(self,T=10000,
                               **kwargs):
         """
@@ -1260,6 +1282,45 @@ class Protein_Landscape():
 
         idxs = reduce(np.union1d,[d_data[d] for d in range(1,max_distance+1)])
         return idxs
+
+    ############################################################################
+    ############################ Machine Learning ##############################
+    ############################################################################
+
+    def fit(self, model, model_args, save_model=False,**kwargs):
+        """
+        Uses ths sklearn syntax to fit the data to model that is provided as a few arguments.
+
+        Parameters
+        ----------
+        model : sklearn or skorch model architecture.
+
+        model_args : {keyword : argument}
+
+            Arguments that will be unpacked when the model is instantiated.
+
+        save_model : bool, default=False
+
+            The boolean value for whether or not the model will be saved to self.learner
+
+        kwargs : {keyword : argument}
+
+            Arguments that will be provided to sklearn_data to perform the necessary splits
+        """
+        x_train, y_train, x_test, y_test = self.sklearn_data(**kwargs)
+        print(len(x_train))
+        model = model(**model_args)
+        if model.__class__.__name__ == "NeuralNetRegressor":
+            y_train, y_test = y_train.reshape(-1,1), y_test.reshape(-1,1)
+        print(f"Training model {model}")
+        model.fit(x_train, y_train)
+        train_score = model.score(x_train, y_train)
+        print(f"Model score on training data: {train_score}")
+        test_score = model.score(x_test, y_test)
+        print(f"Score of {model} on testing data is {test_score}")
+        if save_model:
+            self.learners[f"{model}"] = model
+        return train_score, test_score
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")

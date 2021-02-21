@@ -23,5 +23,7 @@ The package strives to achieve high speeds wherever possible by leveraging numpy
 
 1. Work out how to handle the seed sequence. Should it be removed or not?
     No, it shouldn't be removed, however I need to deal with the fact that it often isn't explicitly included with a fitness value.
-2. Add support for the generation of tensorflow data loaders
+2. Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)
 3. Should I consider updating the array operations to use the cupy package?
+4. Add scaler feature to Sklearn data and by extension, fit.
+5. Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
