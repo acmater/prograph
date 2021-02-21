@@ -187,7 +187,9 @@ class Protein_Landscape():
         self.tokens      = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
 
         self.sequences   = self.data[:,0]
+        self.seq_idxs    = {seq : idx for idx, seq in enumerate(self.sequences)}
         self.fitnesses   = self.data[:,1]
+        self.len         = len(self)
 
         if seed_seq:
             self.seed_seq      = seed_seq
@@ -195,8 +197,8 @@ class Protein_Landscape():
         else:
             self.seed_id        = seed_id
             self.seed_seq       = self.sequences[self.seed_id]
+        self.seq_len     = len(self.seed_seq)
 
-        seq_len        = len(self.seed_seq)
 
         self.tokenized = np.concatenate((self.tokenize_data(),self.fitnesses.reshape(-1,1)),axis=1)
 
@@ -228,6 +230,7 @@ class Protein_Landscape():
             self.linear_slope, self.linear_RMSE, self.RS_ruggedness = self.rs_ruggedness()
 
         self.learners = {}
+        self.context  = "sequences"
 
         print(self)
 
@@ -269,7 +272,14 @@ class Protein_Landscape():
         return len(self.sequences)
 
     def __getitem__(self,idx):
-        return self.data[self.query(idx)]
+        if self.context == "sequences":
+            return self.data[self.query(idx)]
+        elif self.context == "tokenized":
+            return self.tokenized[self.query(idx)]
+        elif self.context == "graph":
+            return self.graph[self.query(idx)]
+        else:
+            pass
 
     def query(self,sequence,information=False) -> int:
         """
@@ -290,20 +300,19 @@ class Protein_Landscape():
             its multiple representations, label, and neighbours (leverages the graph object)
         """
 
-        if type(sequence) == int or isinstance(sequence, np.integer):
-            assert sequence in range(len(self)), "Index exceeds bounds of dataset"
+        if isinstance(sequence, int) or isinstance(sequence, np.integer):
+            assert sequence <= self.len, "Index exceeds bounds of dataset"
             idx = sequence
 
         elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
             assert isinstance(sequence[0], np.integer) or isinstance(sequence[0], int), "Wrong data format in numpy array or list iterable"
-            idx      = sequence
+            idx = sequence
 
-        elif type(sequence) == str:
-                    assert sequence in self.sequences,"This sequence is not in the dataset"
-                    idx = int(np.where(self.sequences == sequence)[0])
+        elif isinstance(sequence, str):
+            idx = self.seq_idxs.get(sequence, "This sequence is not in the dataset")
 
-        elif type(sequence) == tuple:
-            assert len(sequence) == len(self.seed()), "Tuple not valid length for dataset"
+        elif isinstance(sequence, tuple):
+            assert len(sequence) == self.seq_len, "Tuple not valid length for dataset"
             check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
             assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
             idx = int(check)
@@ -606,7 +615,6 @@ class Protein_Landscape():
                 strs.append("{0}".format(char))
         return "".join(strs)
 
-
     def gen_mutation_arrays(self):
         leng = len(self.seed())
         xs = np.arange(leng*len(self.amino_acids))
@@ -670,7 +678,6 @@ class Protein_Landscape():
         """
         return self.sklearn_data(data=(self.lengthen_sequences(seq_len,AAs,mut_indices)),split=split,shuffle=shuffle)
 
-
     def save(self,name=None,ext=".txt"):
         """
         Save function that stores the entire landscape so that it can be reused without
@@ -713,7 +720,7 @@ class Protein_Landscape():
         self.__dict__ = pickle.loads(dataPickle)
         return True
 
-    def generate_mutations(self,seq,bypass=False):
+    def generate_mutations(self,seq):
         """
         Takes a sequence and generates all possible mutants 1 Hamming distance away
         using array substitution
@@ -724,10 +731,7 @@ class Protein_Landscape():
 
             Tokenized sequence array
         """
-        if bypass:
-            seq = self.tokenized[seq,:-1]
-        else:
-            seq = self.tokenized[self.query(seq),:-1]
+        seq = self.tokenized[self.query(seq),:-1]
         seed = self.seed()
         hold_array = np.zeros(((len(seed)*len(self.amino_acids)),len(seed)))
         for i,char in enumerate(seq):
@@ -742,7 +746,7 @@ class Protein_Landscape():
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True,idxs=None,bypass=False):
+    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True,idxs=None):
         """
         Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
 
@@ -774,7 +778,7 @@ class Protein_Landscape():
             token_dict = self.token_dict
 
         if explicit_neighbours:
-            possible_neighbours = self.generate_mutations(seq,bypass=bypass)
+            possible_neighbours = self.generate_mutations(seq)
             actual_neighbours = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
@@ -833,7 +837,7 @@ class Protein_Landscape():
         else:
             explicit_neighbours=True
 
-        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes,bypass=True)
+        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
         results = pool.map(mapfunc,tqdm.tqdm(indexes))
         neighbours = {idx :        {"tokenized"   : tuple(self.tokenized[idx,:-1]),
                                     "string"      : self.sequences[idx],
