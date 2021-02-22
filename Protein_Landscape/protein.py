@@ -28,6 +28,9 @@ class Protein():
             return tuple([self.__dict__[x] for x in keys])
         return self.__dict__[keys]
 
+    def __len__(self):
+        return len(self.seq)
+
 if __name__ == "__main__":
     a = Protein("AAC")
     b = Protein("ACA")

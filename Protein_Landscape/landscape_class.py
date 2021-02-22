@@ -158,32 +158,38 @@ class Protein_Landscape():
             self.csv_path = csv_path
             data = self.csvDataLoader(csv_path,**custom_columns)
 
-        self.amino_acids     = amino_acids
-        self.custom_columns  = custom_columns
-        self.gen_graph       = gen_graph
-        self.tokens          = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
-
         sequences            = data[:,0]
         fitnesses            = data[:,1]
+
+        self.gen_graph       = gen_graph
+
+
+        #### Tokenizing
+        self.amino_acids     = amino_acids
+        self.custom_columns  = custom_columns
+        self.tokens          = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
+
         self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
         self.update_graph(fitnesses,"fitness")
         self.seq_idxs        = {seq : idx for idx, seq in enumerate(sequences)}
         self.len             = len(sequences)
 
         if seed_seq:
-            self.seed_seq      = seed_seq
+            self.seed_prot      = Protein(seed_seq)
 
         else:
             self.seed_id        = seed_id
-            self.seed_seq       = sequences[self.seed_id]
+            self.seed_prot      = Protein(sequences[self.seed_id])
 
-        self.seq_len     = len(self.seed_seq)
+        setattr(self.seed_prot,"tokenized",tuple(self.tokenize(self.seed_prot.seq)))
+
+        self.seq_len     = len(self.seed_prot.seq)
         self.tokenized = np.concatenate((self.tokenize_data(sequences),fitnesses.reshape(-1,1)),axis=1)
         self.update_graph([tuple(x) for x in self.tokenized[:,:-1]],"tokenized")
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
 
         self.mutated_positions = self.calc_mutated_positions()
-        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed_seq)
+        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed_prot.seq)
         # Stratifies data into different hamming distances
 
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
@@ -199,7 +205,7 @@ class Protein_Landscape():
         print(self)
 
     def seed(self):
-        return self.seed_seq
+        return self.seed_prot.seq
 
     def update_graph(self, data, label):
         for idx, protein in self.graph.items():
@@ -222,7 +228,7 @@ class Protein_Landscape():
 
     def __repr__(self):
         # TODO Finish this
-        return f"""Protein_Landscape(seed_seq='{self.seed_seq}',
+        return f"""Protein_Landscape(seed_seq='{self.seed_prot.seq}',
                                   gen_graph={self.gen_graph},
                                   csv_path='{self.csv_path}',
                                   custom_columns={self.custom_columns},
@@ -340,7 +346,7 @@ class Protein_Landscape():
         assert Bool == "or" or Bool == "and", "Not a valid boolean value."
 
         if reference_seq is None:
-            reference_seq   = self.seed_seq
+            reference_seq   = self.seed_prot.seq
             d_data          = self.d_data
         else:
             d_data          = self.gen_d_data(self.query(reference_seq))
@@ -468,7 +474,7 @@ class Protein_Landscape():
             assert pos in self.mutated_positions, "{} is not a position that was mutated in this dataset".format(pos)
 
         constants = np.setdiff1d(self.mutated_positions,positions)
-        index_array = np.ones((len(self.seed_seq)),dtype=np.int8)
+        index_array = np.ones((self.seq_len),dtype=np.int8)
         index_array[positions] = 0
         mutated_indexes = np.all(np.invert(self.sequence_mutation_locations[:,constants]),axis=1)
         # This line checks only the positions that have to be constant, and ensures that they all are
@@ -590,7 +596,7 @@ class Protein_Landscape():
             self.tokenized is called, and the fitness column is removed by [:,:-1]
             Each column is then tested against the first
         """
-        mutated_bools = np.invert(np.all(self.tokenized[:,:-1] == self.tokenize(self.seed_seq),axis=0)) # Calculates the indices all of arrays which are modified.
+        mutated_bools = np.invert(np.all(self.tokenized[:,:-1] == self.tokenize(self.seed_prot.seq),axis=0)) # Calculates the indices all of arrays which are modified.
         mutated_idxs  = mutated_bools * np.arange(1,len(self.seed()) + 1) # Shifts to the right so that zero can be counted as an idx
         return mutated_idxs[mutated_idxs != 0] - 1 # Shifts it back
 
@@ -601,7 +607,7 @@ class Protein_Landscape():
         """
         strs = []
         idxs = self.mutated_positions
-        for i,char in enumerate(self.seed_seq):
+        for i,char in enumerate(self.seed_prot.seq):
             if i in idxs:
                 strs.append(f"{Fore.GREEN}{char}{Style.RESET_ALL}")
             else:
