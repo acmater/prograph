@@ -746,6 +746,13 @@ class Protein_Landscape():
     def graph_to_networkx(self,labels=None):
         """
         Produces a networkx graph from the internally stored graph object
+
+        Parameters
+        ----------
+        labels : [str], default=None
+
+            A list of strings that will be used to generate label_iters using the self.label_iter
+            method. This information will then be added to each node.
         """
         # So the problem here is that I do not know how to stick labels on with the
         # nodes. As a result, cytoscape won't be able to visualize the graphs properly.
@@ -761,6 +768,7 @@ class Protein_Landscape():
         for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("neighbours"))):
             g.add_edges_from([(sequences[idx], sequences[neighbour_idx]) for neighbour_idx in neighbours])
         self.networkx_graph = g
+        return None
 
     ############################################################################
     ################### Data Manipulation and Slicing ##########################

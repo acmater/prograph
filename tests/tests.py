@@ -85,5 +85,10 @@ class TestIndexingOperations(unittest.TestCase):
     def test_distance_reference_indexing(self):
         assert landscape[landscape.indexing(reference_seq="LDC",positions=[1])][3]["seq"] == "LFC", "Reference indexing not working correctly."
 
+class TestNetworkx(unittest.TestCase):
+    def test_networkx_generation(self):
+        landscape.graph_to_networkx(labels=["fitness","tokenized"])
+        assert "fitness" in landscape.networkx_graph.nodes["AAA"].keys(), "Networkx graph generation is not working."
+
 if __name__ == "__main__":
     unittest.main()
