@@ -180,6 +180,7 @@ class Protein_Landscape():
         else:
             self.seed_id        = seed_id
             self.seed_prot      = Protein(sequences[self.seed_id])
+        self.seed = self.seed_prot.seq
 
         setattr(self.seed_prot,"tokenized",tuple(self.tokenize(self.seed_prot.seq)))
 
@@ -442,7 +443,7 @@ class Protein_Landscape():
             A protein sequence provided in any one of the formats that query can parse.
         """
         if seq is None:
-            seq = self.seed()
+            seq = self.seed
 
         else:
             seq = self.graph[self.query(seq)]["seq"]
@@ -597,7 +598,7 @@ class Protein_Landscape():
             Each column is then tested against the first
         """
         mutated_bools = np.invert(np.all(self.tokenized[:,:-1] == self.tokenize(self.seed_prot.seq),axis=0)) # Calculates the indices all of arrays which are modified.
-        mutated_idxs  = mutated_bools * np.arange(1,len(self.seed()) + 1) # Shifts to the right so that zero can be counted as an idx
+        mutated_idxs  = mutated_bools * np.arange(1,len(self.seed) + 1) # Shifts to the right so that zero can be counted as an idx
         return mutated_idxs[mutated_idxs != 0] - 1 # Shifts it back
 
     def coloured_seed_string(self):
@@ -615,7 +616,7 @@ class Protein_Landscape():
         return "".join(strs)
 
     def gen_mutation_arrays(self):
-        leng = len(self.seed())
+        leng = len(self.seed)
         xs = np.arange(leng*len(self.amino_acids))
         ys = np.array([[y for x in range(len(self.amino_acids))] for y in range(leng)]).flatten()
         modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(leng)]).flatten()
@@ -634,7 +635,7 @@ class Protein_Landscape():
             Tokenized sequence array
         """
         seq = self.tokenized[self.query(seq),:-1]
-        seed = self.seed()
+        seed = self.seed
         hold_array = np.zeros(((len(seed)*len(self.amino_acids)),len(seed)))
         for i,char in enumerate(seq):
             hold_array[:,i] = char
@@ -680,13 +681,21 @@ class Protein_Landscape():
             token_dict = self.token_dict
 
         if explicit_neighbours:
-            possible_neighbours = self.generate_mutations(seq)
-            actual_neighbours = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
+            possible_neighbours =self.tuple_seqs(self.generate_mutations(seq))
+            actual_neighbours = []
+            for key in possible_neighbours:
+                if key in token_dict:
+                    actual_neighbours.append(token_dict[key])
+            actual_neighbours = np.sort(actual_neighbours)#[token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
             actual_neighbours = np.where(self.hamming_array(self.query(seq),idxs=idxs) == 1)[0]
 
-        return seq, actual_neighbours
+        return actual_neighbours
+
+    @staticmethod
+    def tuple_seqs(seqs):
+        return [tuple(x) for x in seqs]
 
     # Graph Section
     def build_graph(self,sequences, fitnesses,idxs=None,single_thread=False):
@@ -731,7 +740,7 @@ class Protein_Landscape():
         # representation of the dataset, and determines which to use based around whichever will result in
         # fewer total operations.
 
-        calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed()) * len(self)
+        calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed) * len(self)
         calculating_implicit_neighbours = len(self) ** 2
 
         if calculating_explicit_neighbours >= 10*calculating_implicit_neighbours:
@@ -740,8 +749,8 @@ class Protein_Landscape():
             explicit_neighbours=True
 
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
-        neighbours = pool.map(mapfunc,tqdm.tqdm(indexes))
-        return [x[1] for x in neighbours] # The indices are stored as the first value of the tuple
+        neighbours = list(map(mapfunc,tqdm.tqdm(indexes)))
+        return neighbours # The indices are stored as the first value of the tuple
 
     def graph_to_networkx(self,labels=None):
         """
