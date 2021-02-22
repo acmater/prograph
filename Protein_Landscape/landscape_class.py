@@ -778,7 +778,7 @@ class Protein_Landscape():
         else:
             return copy.copy(self.tokenized)
 
-    def sklearn_data(self, data=None,idxs=None,split=0.8,shuffle=True):
+    def sklearn_data(self, data=None,idxs=None,split=0.8,scaler=False,shuffle=True):
         """
         Parameters
         ----------
@@ -823,6 +823,11 @@ class Protein_Landscape():
 
         if shuffle:
             np.random.shuffle(data)
+
+        if scaler:
+            fitnesses = data[:,-1].reshape(-1,1)
+            scaler.fit(fitnesses)
+            data[:,-1] = scaler.transform(fitnesses).reshape(-1)
 
         split_point = int(len(data)*split)
 

@@ -21,14 +21,10 @@ The package strives to achieve high speeds wherever possible by leveraging numpy
 
 ### Todo
 
-1. Work out how to handle the seed sequence. Should it be removed or not?
-    No, it shouldn't be removed, however I need to deal with the fact that it often isn't explicitly included with a fitness value.
+
 2. Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)
-3. Should I consider updating the array operations to use the cupy package?
-4. Add scaler feature to Sklearn data and by extension, fit.
-5. Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
-6. I want to update the __getitem__ method so that you can extra only sequences, or only fitnesses, if that is what you want
-7. Basically I need to update self.graph so that it uses a custom dictionary that emulates the inbuilt dictionaries, but with a custom __getitem__ syntax which means that if you go self.graph['seq'] it will return all of the sequences. This is the only way to get the behaviour I want. I think.
-8. Add feature to write out its own graphml object
+
+4. Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
+5. Add feature to write out its own graphml object
 
 The system needs to be rebuilt to maximize generalizability, making it work with a wide variety of different systems.
