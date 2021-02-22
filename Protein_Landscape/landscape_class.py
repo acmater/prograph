@@ -404,7 +404,7 @@ class Protein_Landscape():
         Helper function that returns an iterable over a particular label for each
         Protein
         """
-        return [protein[label] for protein in self.graph.values()]
+        return np.array([protein[label] for protein in self.graph.values()])
 
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
@@ -743,20 +743,23 @@ class Protein_Landscape():
         neighbours = pool.map(mapfunc,tqdm.tqdm(indexes))
         return [x[1] for x in neighbours] # The indices are stored as the first value of the tuple
 
-    def graph_to_networkx(self):
+    def graph_to_networkx(self,labels=None):
         """
         Produces a networkx graph from the internally stored graph object
         """
         # So the problem here is that I do not know how to stick labels on with the
         # nodes. As a result, cytoscape won't be able to visualize the graphs properly.
-        prots = [prot["seq"] for prot in self.graph]
+        sequences = self.label_iter("seq")
+        label_iters = []
+        if labels is not None:
+            for label in labels:
+                label_iters.append(self.label_iter(label))
+        prots = [prot for prot in sequences]
         g = nx.Graph()
-        g.add_nodes_from(prots)#,attr_dict={"fitness" : self.fitnesses[idx]})
-        for node in tqdm.tqdm(prots):
-            # I could just shift this to an enumerate operation, I just want to be absolutely
-            # positive that there is no strange changes to the ordering.
-            idx = int(np.where(self.sequences == node)[0])
-            g.add_edges_from([(node, self.sequences[neighbour_idx]) for neighbour_idx in self.graph[idx]["neighbours"]])
+        for idx,prot in enumerate(prots):
+            g.add_node(prot, **{labels[x] : label_iters[x][idx] for x in range(len(label_iters))})
+        for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("neighbours"))):
+            g.add_edges_from([(sequences[idx], sequences[neighbour_idx]) for neighbour_idx in neighbours])
         self.networkx_graph = g
 
     ############################################################################
@@ -988,47 +991,47 @@ class Protein_Landscape():
     ################################ Utilities #################################
     ############################################################################
 
-        def save(self,name=None,ext=".txt"):
-            """
-            Save function that stores the entire landscape so that it can be reused without
-            having to recompute distances and tokenizations
+    def save(self,name=None,ext=".txt"):
+        """
+        Save function that stores the entire landscape so that it can be reused without
+        having to recompute distances and tokenizations
 
-            Parameters
-            ----------
-            name : str, default=None
+        Parameters
+        ----------
+        name : str, default=None
 
-                Name that the class will be saved under. If none is provided it defaults
-                to the same name as the csv file provided.
+            Name that the class will be saved under. If none is provided it defaults
+            to the same name as the csv file provided.
 
-            ext : str, default=".txt"
+        ext : str, default=".txt"
 
-                Extension that the file will be saved with.
-            """
-            if self.csv_path:
-                directory, file = self.csv_path.rsplit("/",1)
-                directory += "/"
-                if not name:
-                    name = file.rsplit(".",1)[0]
-                file = open(directory+name+ext,"wb")
-                file.write(pickle.dumps(self.__dict__))
-                file.close()
-
-        def load(self,name):
-            """
-            Functions that instantiates the landscape from a saved file if one is provided
-
-            Parameters
-            ----------
-            name: str
-
-                Provides the name of the file. MUST contain the extension.
-            """
-            file = open(name,"rb")
-            dataPickle = file.read()
+            Extension that the file will be saved with.
+        """
+        if self.csv_path:
+            directory, file = self.csv_path.rsplit("/",1)
+            directory += "/"
+            if not name:
+                name = file.rsplit(".",1)[0]
+            file = open(directory+name+ext,"wb")
+            file.write(pickle.dumps(self.__dict__))
             file.close()
 
-            self.__dict__ = pickle.loads(dataPickle)
-            return True
+    def load(self,name):
+        """
+        Functions that instantiates the landscape from a saved file if one is provided
+
+        Parameters
+        ----------
+        name: str
+
+            Provides the name of the file. MUST contain the extension.
+        """
+        file = open(name,"rb")
+        dataPickle = file.read()
+        file.close()
+
+        self.__dict__ = pickle.loads(dataPickle)
+        return True
 
 if __name__ == "__main__":
     test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")

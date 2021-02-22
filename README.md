@@ -21,7 +21,6 @@ The package strives to achieve high speeds wherever possible by leveraging numpy
 
 ### Todo
 
-
 2. Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)
 
 4. Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
