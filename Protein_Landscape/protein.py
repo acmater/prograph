@@ -6,20 +6,21 @@ class Protein():
     initialized with a variety of properties and utilises dictionary type syntaxing
     to make it compliant with the remainder of the code.
     """
-    def __init__(self, seq,
-                       fitness=None,
-                       tokenized=None,
-                       neighbours=None):
-        self.seq        = seq
-        self.fitness    = fitness
-        self.tokenized  = tokenized
-        self.neighbours = neighbours
+    def __init__(self, seq,**kwargs):
+        self.seq = seq
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def __repr__(self):
-        return f"""Protein(seq='{self.seq}',
-        fitness={self.fitness},
-        tokenized={self.tokenized},
-        neighbours=np.array({list(self.neighbours)}))"""
+        parsed = []
+        for key, value in vars(self).items():
+            if isinstance(value,np.ndarray):
+                parsed.append(f"{key}=np.array({list(value)})")
+            elif isinstance(value, str):
+                parsed.append(f"{key}='{value}'")
+            else:
+                parsed.append(f"{key}={value}")
+        return f"Protein(" + ",".join(parsed) + ")"
 
     def __getitem__(self,keys):
         if isinstance(keys, list):

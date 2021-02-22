@@ -165,7 +165,7 @@ class Protein_Landscape():
 
         sequences            = data[:,0]
         fitnesses            = data[:,1]
-        self.graph = {idx : Protein(seq) for idx,seq in enumerate(sequences)}
+        self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
         self.update_graph(fitnesses,"fitness")
         self.seq_idxs        = {seq : idx for idx, seq in enumerate(sequences)}
         self.len             = len(sequences)
@@ -234,7 +234,9 @@ class Protein_Landscape():
 
     def __getitem__(self,idx):
         if isinstance(idx, np.ndarray) or isinstance(idx, list):
-            return {x : self.graph[x] for x in self.query(idx)}
+            return {i : self.graph[x] for i,x in enumerate(self.query(idx))}
+            # TODO Should the above return the index of the original data, or a reindexed
+            # iterable?
         else:
             return self.graph[self.query(idx)]
 
