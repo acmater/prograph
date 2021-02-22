@@ -5,6 +5,13 @@ class Protein():
     Python class which handles instances of individual proteins. Protein is
     initialized with a variety of properties and utilises dictionary type syntaxing
     to make it compliant with the remainder of the code.
+
+    Parameters
+    ----------
+    seq : str
+
+        The only required argument. Is used to calculate length and to determine if
+        two proteins are equivalent.
     """
     def __init__(self, seq,**kwargs):
         self.seq = seq
@@ -30,6 +37,20 @@ class Protein():
 
     def __len__(self):
         return len(self.seq)
+
+    def __eq__(self,prot):
+        for attr in vars(self).keys():
+            try:
+                comp = self[attr] == prot[attr]
+                if hasattr(comp, '__iter__'):
+                    if all(comp) is not True:
+                        return False
+                else:
+                    if comp is not True:
+                        return False
+            except:
+                return False
+        return True
 
 if __name__ == "__main__":
     a = Protein("AAC")
