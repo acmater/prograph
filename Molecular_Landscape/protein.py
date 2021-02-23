@@ -1,5 +1,5 @@
 import numpy as np
-from molecule import Molecule
+from abstract.molecule import Molecule
 
 class Protein(Molecule):
     """

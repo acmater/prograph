@@ -12,14 +12,11 @@ import multiprocessing as mp
 from functools import partial, reduce
 from utils.dataset import Dataset
 
-from colorama import Fore
-from colorama import Style
-
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 
-from molecule import Molecule
+from .molecule import Molecule
 
 class Landscape(ABC):
     """
@@ -229,12 +226,9 @@ class Landscape(ABC):
 
     @abstractmethod
     def __repr__(self):
-        # TODO Finish this
-        return f"""Protein_Landscape(seed_seq='{self.seed_prot.seq}',
-                                  gen_graph={self.gen_graph},
-                                  csv_path='{self.csv_path}',
-                                  custom_columns={self.custom_columns},
-                                  amino_acids='{self.amino_acids}')"""
+        return f"""Landscape(gen_graph={self.gen_graph},
+                             csv_path='{self.csv_path}',
+                             custom_columns={self.custom_columns})"""
 
     @abstractmethod
     def __len__(self):
@@ -252,6 +246,15 @@ class Landscape(ABC):
         """
         # Returns a generator based around a particular label
         return (molecule[label] for molecule in self.graph.values())
+
+    @abstractmethod
+    def indexing(self,reference_seq,distances):
+        """
+        Abstract indexing method that provides high level indexing operations to slice the data.
+        Should be able to operate relative to a reference sequence and return a np.ndarray of indices
+        that provide the desired functionality.
+        """
+        pass
 
     # WHAT ABOUT THIS ONE?
     def get_distance(self,dist,d_data=None):
@@ -306,28 +309,6 @@ class Landscape(ABC):
         d_data = {k : v for k,v in subsets.items() if v.any()}
         self.max_distance = max(d_data.keys())
         return d_data
-
-    def get_mutated_positions(self,positions):
-        """
-        Function that returns the portion of the data only where the provided positions
-        have been modified.
-
-        Parameters
-        ----------
-        positions : np.array(ints)
-
-            Numpy array of integer positions that will be used to index the data.
-        """
-        for pos in positions:
-            assert pos in self.mutated_positions, "{} is not a position that was mutated in this dataset".format(pos)
-
-        constants = np.setdiff1d(self.mutated_positions,positions)
-        index_array = np.ones((self.seq_len),dtype=np.int8)
-        index_array[positions] = 0
-        mutated_indexes = np.all(np.invert(self.sequence_mutation_locations[:,constants]),axis=1)
-        # This line checks only the positions that have to be constant, and ensures that they all are
-
-        return mutated_indexes
 
     @staticmethod
     def csvDataLoader(csvfile,x_data,y_data,index_col):
@@ -538,6 +519,7 @@ class Landscape(ABC):
     ############################################################################
     ################################ Utilities #################################
     ############################################################################
+
     @abstractmethod
     def save(self,name=None,ext=".txt"):
         """

@@ -19,7 +19,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 
 from protein import Protein
-from landscape import Landscape
+from abstract.landscape import Landscape
 
 class Protein_Landscape(Landscape):
     """
