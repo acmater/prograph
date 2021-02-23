@@ -395,11 +395,7 @@ class Protein_Landscape(Landscape):
         return self[self.graph[self.query(seq)]["neighbours"]]
 
     def label_iter(self, label):
-        """
-        Helper function that returns an iterable over a particular label for each
-        Protein
-        """
-        return np.array([protein[label] for protein in self.graph.values()])
+        return np.array(list((super().label_iter(label))))
 
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
@@ -477,7 +473,7 @@ class Protein_Landscape(Landscape):
         return mutated_indexes
 
     @staticmethod
-    def hamming(str1, str2):
+    def distance(str1, str2):
         """Calculates the Hamming distance between 2 strings"""
         return sum(c1 != c2 for c1, c2 in zip(str1, str2))
 
@@ -1004,5 +1000,10 @@ class Protein_Landscape(Landscape):
         super().load(name)
 
 if __name__ == "__main__":
-    test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
+    test = Protein_Landscape(csv_path="../Data/Small_NK.csv")
+    print(test.distance("ACA","ACC"))
+    print(test[999])
+    print(test.label_iter(["fitness","rep"]))
+    print(test.calc_neighbours("ACA"))
+    print(test[10])
     #test.save("Test")

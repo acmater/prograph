@@ -11,7 +11,6 @@ import networkx as nx
 import multiprocessing as mp
 from functools import partial, reduce
 from utils.dataset import Dataset
-import torch
 
 from colorama import Fore
 from colorama import Style
@@ -19,6 +18,8 @@ from colorama import Style
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
+
+from molecule import Molecule
 
 class Landscape(ABC):
     """
@@ -205,11 +206,13 @@ class Landscape(ABC):
         self.learners = {}
         print(self)"""
 
+    @abstractmethod
     def update_graph(self, data, label):
         for idx, protein in self.graph.items():
             setattr(protein, label, data[idx])
         return None
 
+    @abstractmethod
     def __str__(self):
         # TODO Change print formatting for seed sequence so it doesn't look bad
         return """
@@ -224,6 +227,7 @@ class Landscape(ABC):
                    len(self.d_data),
                    self.coloured_seed_string())
 
+    @abstractmethod
     def __repr__(self):
         # TODO Finish this
         return f"""Protein_Landscape(seed_seq='{self.seed_prot.seq}',
@@ -232,176 +236,24 @@ class Landscape(ABC):
                                   custom_columns={self.custom_columns},
                                   amino_acids='{self.amino_acids}')"""
 
+    @abstractmethod
     def __len__(self):
         return len(self.tokenized)
 
+    @abstractmethod
     def __getitem__(self,idx):
-        if isinstance(idx, np.ndarray) or isinstance(idx, list):
-            return {x : self.graph[x] for x in self.query(idx)}
-        else:
-            return self.graph[self.query(idx)]
+        return self.graph.get(idx,"Not a valid index")
 
-    def query(self,sequence,information=False):
-        """
-        Helper function that interprets a query sequence and accepts multiple formats.
-        This object works by moving indexes of sequences around due to the large increase
-        in computational efficiency, and as a result this function returns the index associated
-        with this sequence
-
-        Parameters
-        ----------
-        sequence : str, tuple, int
-
-            The sequence to query against the dataset. Multiple valid input formats
-
-        information : Bool, default=True
-
-            Whether or not to return the information rich form of the protein, i.e
-            its multiple representations, label, and neighbours (leverages the graph object)
-        """
-        if isinstance(sequence, int) or isinstance(sequence, np.integer):
-            assert sequence <= self.len, "Index exceeds bounds of dataset"
-            idx = sequence
-
-        elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
-            if isinstance(sequence[0], np.integer) or isinstance(sequence[0], int):
-                idx = sequence
-            elif isinstance(sequence[0], str):
-                idx = [self.seq_idxs.get(seq, "This sequence is not in the dataset") for seq in sequence]
-            else:
-                print("Wrong data format in numpy array or list iterable")
-
-        elif isinstance(sequence, str):
-            idx = self.seq_idxs.get(sequence, "This sequence is not in the dataset")
-
-        elif isinstance(sequence, tuple):
-            assert len(sequence) == self.seq_len, "Tuple not valid length for dataset"
-            check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
-            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
-            idx = int(check)
-
-        else:
-            raise ValueError("Input format not understood")
-
-        if information:
-            assert self.graph is not None, "To provide additional information, the graph must be computed"
-            if isinstance(idx, np.ndarray) or isinstance(idx, list):
-                return {ix : self.graph[ix] for ix in idx}
-            else:
-                return self.graph[idx]
-
-        else:
-            return idx
-
-    def positions(self,positions):
-        return self.indexing(positions=positions)
-
-    def distances(self,distances):
-        return self.indexing(distances=distances)
-
-    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None,Bool="or",complement=False):
-        """
-        Function that handles more complex indexing operations, for example wanting
-        to combine multiple distance indexes or asking for a random set of indices of a given
-        length relative to the overall dataset.
-
-        An important note is that percentage works after distances and positions have been applied.
-        Meaning that it will reduce the index array provided by those two operations first, rather
-        than providing a subset of the data to distances and positions.
-
-        Parameters
-        ----------
-        reference_seq : int, str, tuple
-
-                Any of the valid query inputs that select a single string. This will be used
-                to calculate all relative positions and distances.
-
-        distances : [int], default=None
-
-            A list of integer distances that the dataset will return.
-
-        positions : [int], default=None
-
-            The mutated positions that you want to manually inspect
-
-        percentage : float, default=None, 0 <= split_point <= 1
-
-            Will return a fraction of the data.
-
-        Bool : str, default = "or", "or"/"and"
-
-            A boolean switch that changes the logic used to combine mutated positions.
-
-        complement : bool, default=False
-
-            Whether or not the indexes of the complement should also be returned
-        """
-        idxs = []
-
-        assert Bool == "or" or Bool == "and", "Not a valid boolean value."
-
-        if reference_seq is None:
-            reference_seq   = self.seed_prot.seq
-            d_data          = self.d_data
-        else:
-            d_data          = self.gen_d_data(self.query(reference_seq))
-
-        if distances is not None:
-            if type(distances) == int:
-                distances = [distances]
-            assert type(distances) == list, "Distances must be provided as integer or list"
-            for d in distances:
-                assert d in d_data.keys(), f"{d} is not a valid distance"
-            # Uses reduce from functools package and the union1d operation
-            # to recursively combine the indexing arrays.
-            idxs.append(reduce(np.union1d, [d_data[d] for d in distances]))
-
-        if positions is not None:
-            # This code uses bitwise operations to maximize speed.
-            # It first uses an or gate to collect every one where the desired position was modified
-            # It then goes through each position that shouldn't be changed, and uses three logic gates
-            # to switch ones where they're both on to off, returning the indexes of strings where ONLY
-            # the desired positions are changed
-            not_positions = [x for x in range(len(self[reference_seq]["seq"])) if x not in positions]
-            sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
-            if Bool == "or":
-                working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
-            else:
-                working = reduce(np.logical_and,[sequence_mutation_locations[:,pos] for pos in positions])
-            for pos in not_positions:
-                temp = np.logical_xor(working,sequence_mutation_locations[:,pos])
-                working = np.logical_and(temp,np.logical_not(sequence_mutation_locations[:,pos]))
-            idxs.append(np.where(working)[0])
-
-        if len(idxs) > 0:
-            idxs = reduce(np.intersect1d, idxs)
-        else:
-            idxs = np.array(range(len(self)))
-
-        if percentage is not None:
-            assert 0 <= percentage <= 1, "Percentage must be between 0 and 1"
-            indexes = np.zeros((len(idxs)),dtype=bool)
-            indexes[np.random.choice(np.arange(len(idxs)),size=int(len(idxs)*percentage),replace=False)] = 1
-            return idxs[indexes]
-
-        assert len(idxs) != 0, "No possible valid indices have been provided."
-
-        if complement:
-            return idxs, np.setdiff1d(np.arange(self.len), idxs)
-        else:
-            return idxs
-
-    def neighbours(self, seq, keys=[["seq"]]):
-        """ A simple wrapper function that will return the dictionary containing neighbours for a particular sequence """
-        return self[self.graph[self.query(seq)]["neighbours"]]
-
+    @abstractmethod
     def label_iter(self, label):
         """
         Helper function that returns an iterable over a particular label for each
         Protein
         """
-        return np.array([protein[label] for protein in self.graph.values()])
+        # Returns a generator based around a particular label
+        return (molecule[label] for molecule in self.graph.values())
 
+    # WHAT ABOUT THIS ONE?
     def get_distance(self,dist,d_data=None):
         """ Returns all the index of all arrays at a fixed distance from the seed string
 
@@ -478,51 +330,6 @@ class Landscape(ABC):
         return mutated_indexes
 
     @staticmethod
-    def hamming(str1, str2):
-        """Calculates the Hamming distance between 2 strings"""
-        return sum(c1 != c2 for c1, c2 in zip(str1, str2))
-
-    def hamming_array(self,seq=None,idxs=None):
-        """
-        Function to calculate the hamming distances of every array using vectorized
-        operations
-
-        Function operates by building an array of the (Nxlen(seed sequence)) with
-        copies of the tokenized seed sequence.
-
-        This array is then compared elementwise with the tokenized data, setting
-        all places where they don't match to False. This array is then inverted,
-        and summed, producing an integer representing the difference for each string.
-
-        Parameters:
-        -----------
-        seq : str, int, tuple
-
-            Any valid sequence representation (see query for valid formats)
-
-        idxs : np.array[int]
-
-            A numpy integer index array
-        """
-        if seq is None:
-            tokenized_seq = self.tokenized[0,:-1]
-        else:
-            tokenized_seq = self.tokenized[self.query(seq),:-1]
-
-        if idxs is not None:
-            data = self.tokenized[idxs,:-1]
-        else:
-            data = self.tokenized[:,:-1]
-
-        #hold_array     = np.zeros((len(self.sequences),len(tokenized_seq)))
-        #for i,char in enumerate(tokenized_seq):
-        #    hold_array[:,i] = char
-
-        hammings = np.sum(np.invert(data == tokenized_seq),axis=1)
-
-        return hammings
-
-    @staticmethod
     def csvDataLoader(csvfile,x_data,y_data,index_col):
         """Simple helper function to load NK landscape data from CSV files into numpy arrays.
         Supply outputs to sklearn_split to tokenise and split into train/test split.
@@ -559,6 +366,7 @@ class Landscape(ABC):
 
         return protein_data
 
+    @abstractmethod
     def tokenize(self,seq,tokenizer=None):
         """
         Simple static method which tokenizes an individual sequence
@@ -568,6 +376,7 @@ class Landscape(ABC):
         else:
             return "This feature is not ready yet"
 
+    @abstractmethod
     def tokenize_data(self, sequences):
         """
         Takes an iterable of sequences provided as one amino acid strings and returns
@@ -579,111 +388,51 @@ class Landscape(ABC):
         tokens = self.tokens
         return np.array([[tokens[aa] for aa in seq] for seq in sequences])
 
-    def boolean_mutant_array(self,seq=None):
-        return np.invert(self.tokenized[:,:-1] == self.tokenized[self.query(seq),:-1])
-
-    def calc_mutated_positions(self):
-        """
-        Determines all positions that were modified experimentally and returns the indices
-        of these modifications.
-
-        Because the Numpy code is tricky to read, here is a quick breakdown:
-
-            self.tokenized is called, and the fitness column is removed by [:,:-1]
-            Each column is then tested against the first
-        """
-        mutated_bools = np.invert(np.all(self.tokenized[:,:-1] == self.tokenize(self.seed_prot.seq),axis=0)) # Calculates the indices all of arrays which are modified.
-        mutated_idxs  = mutated_bools * np.arange(1,len(self.seed) + 1) # Shifts to the right so that zero can be counted as an idx
-        return mutated_idxs[mutated_idxs != 0] - 1 # Shifts it back
-
-    def coloured_seed_string(self):
-        """
-        Printing function that prints the original seed string and colours the positions that
-        have been modified
-        """
-        strs = []
-        idxs = self.mutated_positions
-        for i,char in enumerate(self.seed_prot.seq):
-            if i in idxs:
-                strs.append(f"{Fore.GREEN}{char}{Style.RESET_ALL}")
-            else:
-                strs.append("{0}".format(char))
-        return "".join(strs)
-
-    def gen_mutation_arrays(self):
-        leng = len(self.seed)
-        xs = np.arange(leng*len(self.amino_acids))
-        ys = np.array([[y for x in range(len(self.amino_acids))] for y in range(leng)]).flatten()
-        modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(leng)]).flatten()
-        return (xs, ys, modifiers)
-
-    def generate_mutations(self,seq):
-        """
-        Takes a sequence and generates all possible mutants 1 Hamming distance away
-        using array substitution
-
-        Parameters:
-        -----------
-        seq : np.array[int]
-
-            Tokenized sequence array
-        """
-        seq = self.tokenized[self.query(seq),:-1]
-        seed = self.seed
-        hold_array = np.zeros(((len(seed)*len(self.amino_acids)),len(seed)))
-        for i,char in enumerate(seq):
-            hold_array[:,i] = char
-
-        xs, ys, mutations = self.mutation_arrays
-        hold_array[(xs,ys)] = mutations
-        copies = np.invert(np.all(hold_array == seq,axis=1))
-        return hold_array[copies]
-
     ############################################################################
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True,idxs=None):
+    @staticmethod
+    @abstractmethod
+    def distance(rep1, rep2):
         """
-        Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
+        Distance abstractmethod which can be used to calculate the distance between any two
+        representations in the dataset. The default provided here is the Hamming distance
+        between two strings.
+        """
+        return sum(rep1 != rep2 for rep1,rep2 in zip(rep1,rep2))
 
-        There is a particular design decision here that makes it fast in some cases, and slow in others.
-        Instead of checking the entire dataset to see if there are any neighbours present, it calculates all
-        possible neighbours, and checks to see if any of them match entries in the dataset.
-
-        The number of possible neighbours for a given sequence is far smaller than the size of the dataset in almost
-        all cases, which makes this approach significantly faster.
+    @abstractmethod
+    def calc_neighbours(self,rep,idxs=None,threshold=1):
+        """
+        Takes a representation and checks all other representations in the dataset
+        to determine if any of them are neighbours. Note that this is a highly inefficient
+        approach in many cases, and should be overwritten.
 
         Parameters:
         -----------
 
-        seq : int, str, tuple
+        rep : str
 
-            A sequence in any of the valid formats.
+            A string representation of a dataset member
 
-        token_dict : {tuple(tokenized_representation) : int}, default=None
+        idxs : np.array[np.int], default=None
 
-            A token dictionary that matches each tokenized sequence to its integer index.
+            the indexes of possible neighbours to consider
 
-        explicit_neighbours : Bool, default=True
+        threshold : int, default=1
 
-            How the graph is calculated. Explicit neighbours means that it will generate all
-            possible neighbours then check to see if they're in the dataset. Otherwise it will check
-            each sequence in the dataset against each other sequence.
+            Threshold distance in which representations are considered neighbours.
         """
-        if token_dict is None:
-            token_dict = self.token_dict
+        # TODO Add index functionality
+        distances = []
+        for rep2 in self.label_iter("rep"):
+            distances.append(self.distance(rep,rep2))
+        neighbours = np.intersect1d(np.where(0 < np.array(distances))[0],np.where(np.array(distances) <= threshold)[0])
+        return neighbours
 
-        if explicit_neighbours:
-            possible_neighbours = self.generate_mutations(seq)
-            actual_neighbours   = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
-
-        else:
-            actual_neighbours = np.where(self.hamming_array(self.query(seq),idxs=idxs) == 1)[0]
-
-        return actual_neighbours
-
-    def build_graph(self,sequences, fitnesses,idxs=None,single_thread=False):
+    @abstractmethod
+    def build_graph(self, sequences, fitnesses,idxs=None,single_thread=False):
         """
         Efficiently builds the graph of the protein landscape. There are two ways to build
         graphs for protein networks. The first considers the entire data sequence and calculates
@@ -834,4 +583,4 @@ class Landscape(ABC):
         return True
 
 if __name__ == "__main__":
-    test = Protein_Landscape(csv_path="../Data/NK/K4/V1.csv")
+    test = Landscape(csv_path="../Data/NK/K4/V1.csv")
