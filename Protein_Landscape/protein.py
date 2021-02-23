@@ -1,6 +1,7 @@
 import numpy as np
+from molecule import Molecule
 
-class Protein():
+class Protein(Molecule):
     """
     Python class which handles instances of individual proteins. Protein is
     initialized with a variety of properties and utilises dictionary type syntaxing
@@ -13,32 +14,28 @@ class Protein():
         The only required argument. Is used to calculate length and to determine if
         two proteins are equivalent.
     """
-    def __init__(self, seq,**kwargs):
-        self.seq = seq
+    def __init__(self, rep,**kwargs):
+        self.rep = rep
+        super().__init__()
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+    def rep(self):
+        return self.rep
+
     def __repr__(self):
-        parsed = []
-        for key, value in vars(self).items():
-            if isinstance(value,np.ndarray):
-                parsed.append(f"{key}=np.array({list(value)})")
-            elif isinstance(value, str):
-                parsed.append(f"{key}='{value}'")
-            else:
-                parsed.append(f"{key}={value}")
-        return f"Protein(" + ",".join(parsed) + ")"
+        return super().__repr__()
 
     def __getitem__(self,keys):
-        if isinstance(keys, list):
-            # customized behaviour to allow user to specify tuple of keys
-            return tuple([self.__dict__[x] for x in keys])
-        return self.__dict__[keys]
+        return super().__getitem__(keys)
 
     def __len__(self):
-        return len(self.seq)
+        return super().__len__()
 
-    def __eq__(self,prot):
+    def __eq__(self,other):
+        return super().__eq__(other)
+
+    """def __eq__(self,prot):
         for attr in vars(self).keys():
             try:
                 comp = self[attr] == prot[attr]
@@ -51,7 +48,14 @@ class Protein():
             except:
                 return False
         return True
-
+        """
 if __name__ == "__main__":
-    a = Protein("AAC")
+    a = Protein("AAC",fitness=0.3)
+    print(len(a))
+    print(a.rep)
     b = Protein("ACA")
+    c = Protein("AAC")
+    print(a==b)
+    print(a==c)
+    print(a["fitness"])
+    print(a.__repr__())

@@ -120,7 +120,7 @@ class Protein_Landscape():
 
         A memory efficient storage of the graph that can be passed to graph visualisation packages
 
-    Written by Adam Mater, last revision 21.2.21
+    Written by Adam Mater, last revision 23.2.21
     """
 
     def __init__(self,data=None,
@@ -163,7 +163,6 @@ class Protein_Landscape():
 
         self.gen_graph       = gen_graph
 
-
         #### Tokenizing
         self.amino_acids     = amino_acids
         self.custom_columns  = custom_columns
@@ -176,10 +175,10 @@ class Protein_Landscape():
 
         if seed_seq:
             self.seed_prot      = Protein(seed_seq)
-
         else:
             self.seed_id        = seed_id
             self.seed_prot      = Protein(sequences[self.seed_id])
+
         self.seed = self.seed_prot.seq
 
         setattr(self.seed_prot,"tokenized",tuple(self.tokenize(self.seed_prot.seq)))
@@ -202,11 +201,7 @@ class Protein_Landscape():
             self.update_graph(self.build_graph(sequences, fitnesses),"neighbours")
 
         self.learners = {}
-
         print(self)
-
-    def seed(self):
-        return self.seed_prot.seq
 
     def update_graph(self, data, label):
         for idx, protein in self.graph.items():
@@ -233,17 +228,14 @@ class Protein_Landscape():
                                   gen_graph={self.gen_graph},
                                   csv_path='{self.csv_path}',
                                   custom_columns={self.custom_columns},
-                                  amino_acids='{self.amino_acids}'
-                                  )"""
+                                  amino_acids='{self.amino_acids}')"""
 
     def __len__(self):
         return len(self.tokenized)
 
     def __getitem__(self,idx):
         if isinstance(idx, np.ndarray) or isinstance(idx, list):
-            return {i : self.graph[x] for i,x in enumerate(self.query(idx))}
-            # TODO Should the above return the index of the original data, or a reindexed
-            # iterable?
+            return {x : self.graph[x] for x in self.query(idx)}
         else:
             return self.graph[self.query(idx)]
 
@@ -398,6 +390,7 @@ class Protein_Landscape():
             return idxs
 
     def neighbours(self, seq, keys=[["seq"]]):
+        """ A simple wrapper function that will return the dictionary containing neighbours for a particular sequence """
         return self[self.graph[self.query(seq)]["neighbours"]]
 
     def label_iter(self, label):
@@ -622,7 +615,6 @@ class Protein_Landscape():
         modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(leng)]).flatten()
         return (xs, ys, modifiers)
 
-
     def generate_mutations(self,seq):
         """
         Takes a sequence and generates all possible mutants 1 Hamming distance away
@@ -681,23 +673,14 @@ class Protein_Landscape():
             token_dict = self.token_dict
 
         if explicit_neighbours:
-            possible_neighbours =self.tuple_seqs(self.generate_mutations(seq))
-            actual_neighbours = []
-            for key in possible_neighbours:
-                if key in token_dict:
-                    actual_neighbours.append(token_dict[key])
-            actual_neighbours = np.sort(actual_neighbours)#[token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
+            possible_neighbours = self.generate_mutations(seq)
+            actual_neighbours   = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
 
         else:
             actual_neighbours = np.where(self.hamming_array(self.query(seq),idxs=idxs) == 1)[0]
 
         return actual_neighbours
 
-    @staticmethod
-    def tuple_seqs(seqs):
-        return [tuple(x) for x in seqs]
-
-    # Graph Section
     def build_graph(self,sequences, fitnesses,idxs=None,single_thread=False):
         """
         Efficiently builds the graph of the protein landscape. There are two ways to build
@@ -749,10 +732,10 @@ class Protein_Landscape():
             explicit_neighbours=True
 
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
-        neighbours = list(map(mapfunc,tqdm.tqdm(indexes)))
+        neighbours = list(pool.map(mapfunc,tqdm.tqdm(indexes)))
         return neighbours # The indices are stored as the first value of the tuple
 
-    def graph_to_networkx(self,labels=None):
+    def graph_to_networkx(self,labels=None,update_self=False):
         """
         Produces a networkx graph from the internally stored graph object
 
@@ -776,8 +759,11 @@ class Protein_Landscape():
             g.add_node(prot, **{labels[x] : label_iters[x][idx] for x in range(len(label_iters))})
         for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("neighbours"))):
             g.add_edges_from([(sequences[idx], sequences[neighbour_idx]) for neighbour_idx in neighbours])
-        self.networkx_graph = g
-        return None
+        if update_self:
+            self.networkx_graph = g
+            return None
+        else:
+            return g
 
     ############################################################################
     ################### Data Manipulation and Slicing ##########################
