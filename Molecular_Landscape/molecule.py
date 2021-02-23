@@ -14,14 +14,10 @@ class Molecule(ABC):
         The only required argument. Is used to calculate length and to determine if
         two proteins are equivalent.
     """
-    def __init__(self,**kwargs):
+    def __init__(self,rep,**kwargs):
+        self.rep = rep
         for key, value in kwargs.items():
             setattr(self, key, value)
-
-    @property
-    @abstractmethod
-    def rep(self):
-        return self.rep
 
     @abstractmethod
     def __repr__(self):

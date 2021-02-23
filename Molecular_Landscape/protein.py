@@ -16,12 +16,9 @@ class Protein(Molecule):
     """
     def __init__(self, rep,**kwargs):
         self.rep = rep
-        super().__init__()
+        super().__init__(rep)
         for key, value in kwargs.items():
             setattr(self, key, value)
-
-    def rep(self):
-        return self.rep
 
     def __repr__(self):
         return super().__repr__()
