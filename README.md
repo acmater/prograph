@@ -1,6 +1,6 @@
-# Protein Landscape
+# Molecular Landscapes
 
-Package that interacts with structured protein datasets and provides a large
+Package that interacts with structured molecular datasets and provides a large
 range of functionalities to integrate it with machine learning workflows.
 
 ## Features
