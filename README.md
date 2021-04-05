@@ -1,4 +1,4 @@
-# Molecular Landscapes
+# Molecular Spaces
 
 Package that interacts with structured molecular datasets and provides a large
 range of functionalities to integrate it with machine learning workflows.
@@ -12,6 +12,8 @@ variety of other methods to accelerate computation.
 4. The capacity to return data (indexed or not) in formats that are pre-prepared for a variety of machine learning tasks including Scikit-learn, Pytorch, and (To do) Tensorflow
 
 ## How it works
+
+The code relies on the interaction of two abstract objects: molecular.py and space.py. These abstract classes provide the user with an API to customize the behaviour of the interactions, resulting in different graphs that can be indexed and traversed in a variety of ways.
 
 The code has two fundamental subcomponents:
 1.   The ability to slice the data in a wide variety of ways.
