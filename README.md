@@ -1,6 +1,6 @@
-# Molecular Spaces
+# Protein Landscapes
 
-Package that interacts with structured molecular datasets and provides a large
+Package that interacts with protein datasets and provides a large
 range of functionalities to integrate it with machine learning workflows.
 
 ## Features
@@ -10,6 +10,7 @@ range of functionalities to integrate it with machine learning workflows.
 3. The software will use multiprocessing to calculate the graph of the protein dataset, which is then leveraged by a wide
 variety of other methods to accelerate computation.
 4. The capacity to return data (indexed or not) in formats that are pre-prepared for a variety of machine learning tasks including Scikit-learn, Pytorch, and (To do) Tensorflow
+5. Direct integration with sci-kit learn by instantiating models internally.
 
 ## How it works
 
