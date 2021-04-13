@@ -18,7 +18,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 
-from protein import Protein
+from .protein import Protein
 from abstract.landscape import Landscape
 
 class Protein_Landscape(Landscape):
@@ -509,10 +509,6 @@ class Protein_Landscape(Landscape):
         else:
             data = self.tokenized[:,:-1]
 
-        #hold_array     = np.zeros((len(self.sequences),len(tokenized_seq)))
-        #for i,char in enumerate(tokenized_seq):
-        #    hold_array[:,i] = char
-
         hammings = np.sum(np.invert(data == tokenized_seq),axis=1)
 
         return hammings
@@ -971,6 +967,9 @@ class Protein_Landscape(Landscape):
         kwargs : {keyword : argument}
 
             Arguments that will be provided to sklearn_data to perform the necessary splits
+
+        Example Syntax - landscape.fit(LinearRegressor,{"fit_intercept" : True})
+            Fits a sklearn linear regressor with the fit intercept attribute set to True.
         """
         x_train, y_train, x_test, y_test = self.sklearn_data(**kwargs)
         print(len(x_train))
