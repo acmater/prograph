@@ -232,7 +232,7 @@ class Protein_Landscape(Landscape):
                                   amino_acids='{self.amino_acids}')"""
 
     def __len__(self):
-        return len(self.tokenized)
+        return len(self.graph)
 
     def __getitem__(self,idx):
         if isinstance(idx, np.ndarray) or isinstance(idx, list):
@@ -758,6 +758,20 @@ class Protein_Landscape(Landscape):
         else:
             return g
 
+    def degree(self):
+        """
+        Method to calculate the degree of each node in the graph.
+
+        Returns
+        -------
+        degrees : np.array,
+            A numpy array where each value is the degree of the corresponding protein node in the graph.
+        """
+        degrees = np.zeros((len(self),),dtype=np.int)
+        for i in range(len(self)):
+            degrees[i] = len(land[i].neighbours)
+        return degrees
+
     ############################################################################
     ################### Data Manipulation and Slicing ##########################
     ############################################################################
@@ -972,7 +986,6 @@ class Protein_Landscape(Landscape):
             Fits a sklearn linear regressor with the fit intercept attribute set to True.
         """
         x_train, y_train, x_test, y_test = self.sklearn_data(**kwargs)
-        print(len(x_train))
         model = model(**model_args)
         if model.__class__.__name__ == "NeuralNetRegressor":
             y_train, y_test = y_train.reshape(-1,1), y_test.reshape(-1,1)
