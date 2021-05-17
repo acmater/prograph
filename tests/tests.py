@@ -2,15 +2,15 @@ import unittest
 import numpy as np
 import torch
 
-from Protein_Landscape.landscape_class import Protein_Landscape
+from prograph import Prograph
 
 # Need to find a better way to do the test below
 
 class TestGenLandscape(unittest.TestCase):
     def gen_landscape(self):
-        landscape = Protein_Landscape(csv_path="../Data/Small_NK.csv",gen_graph=True)
+        landscape = Prograph(csv_path="data/Small_NK.csv",gen_graph=True)
 
-landscape = Protein_Landscape(csv_path="../Data/Small_NK.csv",gen_graph=True)
+landscape = Prograph(csv_path="data/Small_NK.csv",gen_graph=True)
 
 class TestQuery(unittest.TestCase):
     def test_string_idx(self):
@@ -22,9 +22,9 @@ class TestQuery(unittest.TestCase):
     def test_len(self):
         assert len(landscape) == 1000, "__getitem__ method is failing"
     def test_list(self):
-        assert landscape[[1,2,4]][2]["seq"] == "AAF", "list indexing has failed"
+        assert landscape[[1,2,4]][2]["seq"] == "AAD", "list indexing has failed"
     def test_array(self):
-        assert landscape[np.array([63,87])][1]["seq"] == "AKI", "numpy array indexing has failed"
+        assert landscape[np.array([63,87])][87]["seq"] == "AKI", "numpy array indexing has failed"
 
 class TestIndexing(unittest.TestCase):
     def test_positions(self):
@@ -47,7 +47,7 @@ class TestDistanceGeneration(unittest.TestCase):
         landscape.gen_d_data(seq="ACL")
     def test_get_distance_custom_d_data(self):
         out = landscape[landscape.get_distance(dist=0,d_data=landscape.gen_d_data(seq="ACL"))]
-        assert out[0]["seq"] == 'ACL'
+        assert out[19]["seq"] == 'ACL'
     def test_calc_neighnours(self):
         assert np.all(landscape.calc_neighbours(seq="ACL",explicit_neighbours=False)[1] == landscape.calc_neighbours(seq="ACL",explicit_neighbours=True)[1]), "Calc neighbours has an error"
 
@@ -83,11 +83,11 @@ class TestIndexingOperations(unittest.TestCase):
             landscape.indexing(distances=[1,2,4])
         assert len(landscape.indexing(distances=[1,3])) == 756
     def test_distance_reference_indexing(self):
-        assert landscape[landscape.indexing(reference_seq="LDC",positions=[1])][3]["seq"] == "LFC", "Reference indexing not working correctly."
+        assert landscape[landscape.indexing(reference_seq="LDC",positions=[1])][901]["seq"] == "LAC", "Reference indexing not working correctly."
 
 class TestNetworkx(unittest.TestCase):
     def test_networkx_generation(self):
-        landscape.graph_to_networkx(labels=["fitness","tokenized"])
+        landscape.graph_to_networkx(labels=["fitness","tokenized"],update_self=True)
         assert "fitness" in landscape.networkx_graph.nodes["AAA"].keys(), "Networkx graph generation is not working."
 
 if __name__ == "__main__":
