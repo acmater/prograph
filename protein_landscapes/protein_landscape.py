@@ -16,7 +16,7 @@ from colorama import Style
 
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
 from abstract.landscape import Landscape
@@ -361,7 +361,7 @@ class Protein_Landscape(Landscape):
             # It then goes through each position that shouldn't be changed, and uses three logic gates
             # to switch ones where they're both on to off, returning the indexes of strings where ONLY
             # the desired positions are changed
-            not_positions = [x for x in range(len(self[reference_seq]["seq"])) if x not in positions]
+            not_positions = [x for x in range(len(self[reference_seq])) if x not in positions]
             sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
             if Bool == "or":
                 working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
