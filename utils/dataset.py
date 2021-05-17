@@ -1,4 +1,4 @@
-import torch 
+import torch
 
 class Dataset(torch.utils.data.Dataset):
     'Characterizes a dataset for PyTorch'
@@ -10,7 +10,7 @@ class Dataset(torch.utils.data.Dataset):
     def __len__(self):
         'Denotes the total number of samples'
         return len(self.list_IDs)
-    
+
     def __add__(self,other):
         'Enables the addition of two datasets'
         new_labels = {**self.labels, **other.labels}
@@ -27,7 +27,6 @@ class Dataset(torch.utils.data.Dataset):
         y = self.labels[ID]
 
         return X, y
-
 
 def map_str(string,char_encoding):
     hold = torch.Tensor([char_encoding[x] for x in string])

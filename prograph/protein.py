@@ -40,18 +40,3 @@ class Protein():
 
     def __eq__(self,other):
         return True if self.seq == other.seq else False
-
-"""def __eq__(self,prot):
-    for attr in vars(self).keys():
-        try:
-            comp = self[attr] == prot[attr]
-            if hasattr(comp, '__iter__'):
-                if all(comp) is not True:
-                    return False
-            else:
-                if comp is not True:
-                    return False
-        except:
-            return False
-    return True
-    """

@@ -120,7 +120,7 @@ class Prograph():
 
         A memory efficient storage of the graph that can be passed to graph visualisation packages
 
-    Written by Adam Mater, last revision 17.5.21
+    Written by Adam Mater, last revision 18.5.21
     """
 
     def __init__(self,data=None,
@@ -136,7 +136,7 @@ class Prograph():
                       ):
         if saved_file:
             try:
-                print(saved_file)
+                print(f"Trying to load {saved_file}")
                 self.load(saved_file)
                 return None
             except:
@@ -1001,7 +1001,7 @@ class Prograph():
     ################################ Utilities #################################
     ############################################################################
 
-    def save(self,name=None,ext=".pkl"):
+    def save(self,name=None,ext=".pkl",directory=None):
         """
         Save function that stores the entire landscape so that it can be reused without
         having to recompute distances and tokenizations
@@ -1009,23 +1009,31 @@ class Prograph():
         Parameters
         ----------
         name : str, default=None
-
             Name that the class will be saved under. If none is provided it defaults
-            to the same name as the csv file provided.
+            to the same name as the csv file provided if it exists or the template name "pgraph"
 
         ext : str, default=".pkl"
-
             Extension that the file will be saved with.
+
+        directory : str, default=None
+            The directory that the object will be saved to. If None, defaults to the location of the csv file if
+            it exists or the local directory.
         """
+        if directory is None:
+            if hasattr(self,'csv_path'):
+                directory, file = self.csv_path.rsplit("/",1)
+                directory += "/"
+            else:
+                directory, file = "./", "pgraph"
+        if not name:
+            name = file.rsplit(".",1)[0]
         print(f"Saving Graph to {name + ext}")
-        if self.csv_path:
-            directory, file = self.csv_path.rsplit("/",1)
-            directory += "/"
-            if not name:
-                name = file.rsplit(".",1)[0]
+        try:
             file = open(directory+name+ext,"wb")
             file.write(pickle.dumps(self.__dict__))
             file.close()
+        except Exception as e:
+            print("Error occurred during saving:", e)
 
     def load(self,name):
         """
@@ -1038,9 +1046,12 @@ class Prograph():
             Provides the name of the file. MUST contain the extension.
         """
         print(f"Loading Graph {name}")
-        file = open(name,"rb")
-        dataPickle = file.read()
-        file.close()
+        try:
+            file = open(name,"rb")
+            dataPickle = file.read()
+            file.close()
+        except Exception as e:
+            print("Error occurred during loading of file:", e)
 
         self.__dict__ = pickle.loads(dataPickle)
         return True
