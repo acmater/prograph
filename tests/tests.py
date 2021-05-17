@@ -8,9 +8,9 @@ from prograph import Prograph
 
 class TestGenLandscape(unittest.TestCase):
     def gen_landscape(self):
-        landscape = Prograph(csv_path="data/Small_NK.csv",gen_graph=True)
+        landscape = Prograph(csv_path="data/synthetic_data.csv",gen_graph=True)
 
-landscape = Prograph(csv_path="data/Small_NK.csv",gen_graph=True)
+landscape = Prograph(csv_path="data/synthetic_data.csv",gen_graph=True)
 
 class TestQuery(unittest.TestCase):
     def test_string_idx(self):

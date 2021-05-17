@@ -1044,12 +1044,3 @@ class Prograph():
 
         self.__dict__ = pickle.loads(dataPickle)
         return True
-
-if __name__ == "__main__":
-    test = Prograph(csv_path="data/Small_NK.csv")
-    print(test.distance("ACA","ACC"))
-    print(test[999])
-    print(test.label_iter(["fitness","rep"]))
-    print(test.calc_neighbours("ACA"))
-    print(test[10])
-    #test.save("Test")

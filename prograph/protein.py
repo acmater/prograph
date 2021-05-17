@@ -41,18 +41,6 @@ class Protein():
     def __eq__(self,other):
         return True if self.seq == other.seq else False
 
-if __name__ == "__main__":
-    a = Protein("AAC",fitness=0.3)
-    print(len(a))
-    print(a.seq)
-    b = Protein("ACA")
-    c = Protein("AAC")
-    print(a==b)
-    print(a==c)
-    print(a["fitness"])
-    print(a.__repr__())
-
-
 """def __eq__(self,prot):
     for attr in vars(self).keys():
         try:
