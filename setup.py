@@ -127,14 +127,15 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['numpy',
-                      'pandas',
+    install_requires=['numpy>=1.20.1',
+                      'pandas>=1.2.4',
                       'tqdm>=4.45.0',
-                      'multiprocess',
-                      'scipy',
+                      'multiprocess>=0.70.11.1',
+                      'scipy>=1.6.2',
                       'scikit-learn>=0.24.1',
-                      'torch',
-                      'colorama'
+                      'torch>=1.8.1',
+                      'colorama>=0.4.4',
+                      'networkx>=2.5.1'
     ],  # Optional
 
     # List additional groups of dependencies here (e.g. development
