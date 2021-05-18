@@ -105,7 +105,6 @@ class Prograph():
 
     Written by Adam Mater, last revision 18.5.21
     """
-
     def __init__(self,data=None,
                       seed_seq=None,
                       seed_id=0,
@@ -186,6 +185,20 @@ class Prograph():
         print(self)
 
     def update_graph(self, data, label):
+        """
+        Function that updates the internal graph structure. The data array must have the same
+        order as protein sequences in the original graph.
+
+        Parameters
+        ----------
+        data : iterable
+            An iterable that contains the labels that will be used to update the graph.
+            The iterable must support positional indexing as its values will be accessed
+            as data[idx], where index is an integer.
+
+        label : str
+            A string that will be used as the key for this property in each Protein object
+        """
         for idx, protein in self.graph.items():
             setattr(protein, label, data[idx])
         return None
@@ -205,7 +218,6 @@ class Prograph():
                    self.coloured_seed_string())
 
     def __repr__(self):
-        # TODO Finish this
         return f"""Protein_Landscape(seed_seq='{self.seed_prot.seq}',
                                   gen_graph={self.gen_graph},
                                   csv_path='{self.csv_path}',
@@ -527,7 +539,7 @@ class Prograph():
         an array of their tokenized form.
 
         Note : The tokenize function is not called and the tokens value is regenerated
-        as it removes a lot of function calls and speeds up the operation significantly.
+        as it removes a lot of attribute calls and speeds up the operation.
         """
         tokens = self.tokens
         return np.array([[tokens[aa] for aa in seq] for seq in sequences])

@@ -136,7 +136,8 @@ setup(
                       'torch>=1.8.1',
                       'colorama>=0.4.4',
                       'networkx>=2.5.1'
-    ],  # Optional
+    ],
+    # Optional
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
