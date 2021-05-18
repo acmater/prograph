@@ -1,6 +1,8 @@
 import unittest
 import numpy as np
 import torch
+import os
+from prograph.utils import save, load
 
 from prograph import Prograph
 
@@ -94,6 +96,20 @@ class TestLoadPrograph(unittest.TestCase):
     def test_load_pgraph(self):
         pgraph = Prograph(saved_file="data/synthetic_pgraph.pkl")
         assert pgraph[0]["fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
+    def test_load_wrong_type(self):
+        with self.assertRaises(AssertionError) and self.assertRaises(FileNotFoundError):
+            pgraph = Prograph(saved_file=2)
+    def test_load_empty(self):
+        pgraph = Prograph(saved_file=None)
+        assert pgraph.__dict__ == {}, "The initialized graph is not empty."
+
+class TestSavePrograph(unittest.TestCase):
+    def test_save_pgraph(self):
+        pgraph = Prograph(saved_file="data/synthetic_pgraph.pkl")
+        assert save(pgraph,name="test",directory="./"), "Protein graph could not be saved correctly"
+        new_pgraph = load("test.pkl")
+        assert new_pgraph[0]["seq"] == "AAA", "Graph loaded following saving is not functioning correctly."
+        os.remove("test.pkl")
 
 if __name__ == "__main__":
     unittest.main()

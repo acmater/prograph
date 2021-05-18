@@ -8,8 +8,9 @@ import tqdm as tqdm
 import networkx as nx
 import multiprocessing as mp
 from functools import partial, reduce
-from utils.dataset import Dataset
+from .utils import Dataset, load, save
 import torch
+import os
 
 from colorama import Fore
 from colorama import Style
@@ -26,28 +27,22 @@ class Prograph():
 
     Parameters
     ----------
-
     data : np.array
-
         Numpy Array containg protein data. Expected shape is (Nx2), with the first
         column being the sequences, and the second being the fitnesses
 
     seed_seq : str, default=None
-
         Enables the user to explicitly provide the seed sequence as a string
 
     seed_id : int,default=0
-
         Id of seed sequences within sequences and fitness
 
     csv_path : str,default=None
-
         Path to the csv file that should be imported using CSV loader function
 
     custom_columns : {"x_data"    : str,
                       "y_data"    : str
                       "index_col" : int}, default=None
-
         First two entries are custom strings to use as column headers when extracting
         data from CSV. Replaces default values of "Sequence" and "Fitness".
 
@@ -56,61 +51,49 @@ class Prograph():
         They are passed to the function as keyword arguments
 
     amino_acids : str, default='ACDEFGHIKLMNPQRSTVWY'
-
         String containing all allowable amino acids for tokenization functions
 
     saved_file : str, default=None
-
         Saved version of this class that will be loaded instead of instantiating a new one
 
     Attributes
     ----------
     amino_acids : str, default='ACDEFGHIKLMNPQRSTVWY'
-
         String containing all allowable amino acids in tokenization functions
 
     sequence_mutation_locations : np.array(bool)
-
         Array that stores boolean values with Trues indicating that the position is
         mutated relative to the seed sequence
 
      mutated_positions: np.array(int)
-
         Numpy array that stores the integers of each position that is mutated
 
     d_data : {distance : index_array}
-
         A dictionary where each distance is a key and the values are the indexes of nodes
         with that distance from the seed sequence
 
     tokens : {tuple(tokenized_sequence) : index}
-
         A dictionary that stores a tuple format of the tokenized string with the index
         of it within the data array as the value. Used to rapidly perform membership checks
 
     seed_seq : str
-
         Seed sequence as a string
 
     tokenized : np.array, shape(N,L+1)
-
         Array containing each sequence with fitness appended onto the end.
         For the shape, N is the number of samples, and L is the length of the seed sequence
 
     mutation_array : np.array, shape(L*20,L)
-
         Array containing all possible mutations to produce sequences 1 amino acid away.
         Used by maxima generator to accelerate the construction of the graph.
 
         L is sequence length.
 
     hammings : np.array(N,)
-
         Numpy array of length number of samples, where each value is the hamming
         distance of the species at that index from the seed sequence.
 
     max_distance : int
-
         The maximum distance from the seed sequence within the dataset.
 
     graph : {idx  : "tokenized"  : tuple(int)     - a Tuple representation of the tokenized protein sequence
@@ -118,7 +101,7 @@ class Prograph():
                     "fitness"    : float          - The fitness value associated with this protein
                     "neighbours" : np.array[idxs] - A numpy array of indexes in the dataset that are neighbours
 
-        A memory efficient storage of the graph that can be passed to graph visualisation packages
+        Storage of the graph that can be passed to graph visualisation packages
 
     Written by Adam Mater, last revision 18.5.21
     """
@@ -137,13 +120,14 @@ class Prograph():
         if saved_file:
             try:
                 print(f"Trying to load {saved_file}")
-                self.load(saved_file)
+                self = load(saved_file,pgraph=self)
                 return None
             except:
-                raise Exception.FileNotFoundError("File could not be opened")
+                raise FileNotFoundError("File could not be opened")
 
         if (not data and not csv_path):
-            raise Exception.FileNotFoundError("Data must be provided as numpy array or csv file")
+            print("Initializing empty protein graph")
+            return
 
         if csv_path and data:
             print("""Both a filepath and a data array has been provided. The CSV is
@@ -153,7 +137,6 @@ class Prograph():
             data = self.csvDataLoader(csv_path,**custom_columns)
 
         elif csv_path:
-
             self.csv_path = csv_path
             data = self.csvDataLoader(csv_path,**custom_columns)
 
@@ -248,11 +231,9 @@ class Prograph():
         Parameters
         ----------
         sequence : str, tuple, int
-
             The sequence to query against the dataset. Multiple valid input formats
 
         information : Bool, default=True
-
             Whether or not to return the information rich form of the protein, i.e
             its multiple representations, label, and neighbours (leverages the graph object)
         """
@@ -309,28 +290,22 @@ class Prograph():
         Parameters
         ----------
         reference_seq : int, str, tuple
-
                 Any of the valid query inputs that select a single string. This will be used
                 to calculate all relative positions and distances.
 
         distances : [int], default=None
-
             A list of integer distances that the dataset will return.
 
         positions : [int], default=None
-
             The mutated positions that you want to manually inspect
 
         percentage : float, default=None, 0 <= split_point <= 1
-
             Will return a fraction of the data.
 
         Bool : str, default = "or", "or"/"and"
-
             A boolean switch that changes the logic used to combine mutated positions.
 
         complement : bool, default=False
-
             Whether or not the indexes of the complement should also be returned
         """
         idxs = []
@@ -401,11 +376,9 @@ class Prograph():
         Parameters
         ----------
         dist : int
-
             The distance that you want extracted
 
         d_data : dict, default=None
-
             A custom d_data dictionary can be provided. If none is provided, self.d_data
             is used.
         """
@@ -427,7 +400,6 @@ class Prograph():
         Parameters
         ----------
         seq : str, int, tuple
-
             A protein sequence provided in any one of the formats that query can parse.
         """
         if seq is None:
@@ -456,7 +428,6 @@ class Prograph():
         Parameters
         ----------
         positions : np.array(ints)
-
             Numpy array of integer positions that will be used to index the data.
         """
         for pos in positions:
@@ -490,11 +461,9 @@ class Prograph():
         Parameters:
         -----------
         seq : str, int, tuple
-
             Any valid sequence representation (see query for valid formats)
 
         idxs : np.array[int]
-
             A numpy integer index array
         """
         if seq is None:
@@ -520,25 +489,20 @@ class Prograph():
         ----------
 
         csvfile : str
-
             Path to CSV file that will be loaded
 
         x_data : str, default="Sequence"
-
             String key used to extract relevant x_data column from pandas dataframe of
             imported csv file
 
         y_data : str, default="Fitness"
-
             String key used to extract relevant y_data column from pandas dataframe  of
             imported csv file
 
         index_col : int, default=None
-
             Interger value, if provided, will determine the column to use as the index column
 
         returns np.array (Nx2), where N is the number of rows in the csv file
-
             Returns an Nx2 array with the first column being x_data (sequences), and the second being
             y_data (fitnesses)
         """
@@ -577,7 +541,6 @@ class Prograph():
         of these modifications.
 
         Because the Numpy code is tricky to read, here is a quick breakdown:
-
             self.tokenized is called, and the fitness column is removed by [:,:-1]
             Each column is then tested against the first
         """
@@ -614,7 +577,6 @@ class Prograph():
         Parameters:
         -----------
         seq : np.array[int]
-
             Tokenized sequence array
         """
         seq = self.tokenized[self.query(seq),:-1]
@@ -647,15 +609,12 @@ class Prograph():
         -----------
 
         seq : int, str, tuple
-
             A sequence in any of the valid formats.
 
         token_dict : {tuple(tokenized_representation) : int}, default=None
-
             A token dictionary that matches each tokenized sequence to its integer index.
 
         explicit_neighbours : Bool, default=True
-
             How the graph is calculated. Explicit neighbours means that it will generate all
             possible neighbours then check to see if they're in the dataset. Otherwise it will check
             each sequence in the dataset against each other sequence.
@@ -689,7 +648,6 @@ class Prograph():
         Parameters:
         -----------
         idxs : np.array[int]
-
             An array of integers that are used to index the complete dataset
             and provide a subset to construct a subgraph of the full dataset.
         """
@@ -733,7 +691,6 @@ class Prograph():
         Parameters
         ----------
         labels : [str], default=None
-
             A list of strings that will be used to generate label_iters using the self.label_iter
             method. This information will then be added to each node.
         """
@@ -996,62 +953,3 @@ class Prograph():
         if save_model:
             self.learners[f"{model}"] = model
         return train_score, test_score
-
-    ############################################################################
-    ################################ Utilities #################################
-    ############################################################################
-
-    def save(self,name=None,ext=".pkl",directory=None):
-        """
-        Save function that stores the entire landscape so that it can be reused without
-        having to recompute distances and tokenizations
-
-        Parameters
-        ----------
-        name : str, default=None
-            Name that the class will be saved under. If none is provided it defaults
-            to the same name as the csv file provided if it exists or the template name "pgraph"
-
-        ext : str, default=".pkl"
-            Extension that the file will be saved with.
-
-        directory : str, default=None
-            The directory that the object will be saved to. If None, defaults to the location of the csv file if
-            it exists or the local directory.
-        """
-        if directory is None:
-            if hasattr(self,'csv_path'):
-                directory, file = self.csv_path.rsplit("/",1)
-                directory += "/"
-            else:
-                directory, file = "./", "pgraph"
-        if not name:
-            name = file.rsplit(".",1)[0]
-        print(f"Saving Graph to {name + ext}")
-        try:
-            file = open(directory+name+ext,"wb")
-            file.write(pickle.dumps(self.__dict__))
-            file.close()
-        except Exception as e:
-            print("Error occurred during saving:", e)
-
-    def load(self,name):
-        """
-        Functions that instantiates the landscape from a saved file if one is provided
-
-        Parameters
-        ----------
-        name: str
-
-            Provides the name of the file. MUST contain the extension.
-        """
-        print(f"Loading Graph {name}")
-        try:
-            file = open(name,"rb")
-            dataPickle = file.read()
-            file.close()
-        except Exception as e:
-            print("Error occurred during loading of file:", e)
-
-        self.__dict__ = pickle.loads(dataPickle)
-        return True
