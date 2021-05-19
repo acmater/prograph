@@ -43,15 +43,15 @@ class TestIndexing(unittest.TestCase):
         assert pgraph.indexing(positions=[1,2],distances=2,complement=True)[1][12] == 30, "The Complement Method is failing"
 
 class TestDistanceGeneration(unittest.TestCase):
-    def test_get_distance_normal(self):
+    """def test_get_distance_normal(self):
         pgraph.get_distance(2)
     def test_gen_d_data(self):
         pgraph.gen_d_data(seq="ACL")
     def test_get_distance_custom_d_data(self):
         out = pgraph[pgraph.get_distance(dist=0,d_data=pgraph.gen_d_data(seq="ACL"))]
-        assert out[19]["seq"] == 'ACL'
+        assert out[19]["seq"] == 'ACL'"""
     def test_calc_neighnours(self):
-        assert np.all(pgraph.calc_neighbours(seq="ACL",explicit_neighbours=False)[1] == pgraph.calc_neighbours(seq="ACL",explicit_neighbours=True)[1]), "Calc neighbours has an error"
+        assert np.all(pgraph.calc_neighbours(seq="ACL") == pgraph["ACL"]["neighbours"]), "Calc neighbours has an error"
 
 class TestPyTorchDataLoaders(unittest.TestCase):
     def test_pytorch_dataloader_generation(self):
@@ -94,13 +94,13 @@ class TestIndexingOperations(unittest.TestCase):
 
 class TestNetworkx(unittest.TestCase):
     def test_networkx_generation(self):
-        pgraph.graph_to_networkx(labels=["fitness","tokenized"],update_self=True)
-        assert "fitness" in pgraph.networkx_graph.nodes["AAA"].keys(), "Networkx graph generation is not working."
+        pgraph.graph_to_networkx(labels=["Fitness","tokenized"],update_self=True)
+        assert "Fitness" in pgraph.networkx_graph.nodes["AAA"].keys(), "Networkx graph generation is not working."
 
 class TestLoadPrograph(unittest.TestCase):
     def test_load_pgraph(self):
         pgraph = Prograph(saved_file="data/synthetic_data.pkl")
-        assert pgraph[0]["fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
+        assert pgraph[0]["Fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
     def test_load_wrong_type(self):
         with self.assertRaises(AssertionError) and self.assertRaises(FileNotFoundError):
             pgraph = Prograph(saved_file=2)
