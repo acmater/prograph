@@ -9,6 +9,7 @@ import numpy as np
 import tqdm as tqdm
 import pandas as pd
 import networkx as nx
+import sklearn.utils as skutils
 import multiprocessing as mp
 from colorama import Fore, Style
 from functools import partial, reduce
@@ -193,7 +194,7 @@ class Prograph():
         distances = hamming(self.tokenized,self.tokenized[self.query(self.seed.seq)].reshape(1,-1))
         # TODO Change print formatting for seed sequence so it doesn't look bad
         return """
-        Protein Landscape class
+            Protein Landscape class
             Number of Sequences : {0}
             Max Distance        : {1}
             Number of Distances : {2}
@@ -344,7 +345,7 @@ class Prograph():
             # It first uses an or gate to collect every one where the desired position was modified
             # It then goes through each position that shouldn't be changed, and uses three logic gates
             # to switch ones where they're both on to off, returning the indexes of strings where ONLY
-            # the desired positions are changed
+            # the desired positions are changed.
             not_positions = [x for x in range(len(self[reference_seq])) if x not in positions]
             sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
             if Bool == "or":
@@ -399,7 +400,7 @@ class Prograph():
         """ A simple wrapper function that will return the dictionary containing neighbours for a particular sequence """
         return self[self.graph[self.query(seq)]["neighbours"]]
 
-    def label_iter(self, label):
+    def label_iter(self, label, **kwargs):
         """
         Helper function that generates an iterable from the protein graph.
 
@@ -408,11 +409,12 @@ class Prograph():
         label : str
             A string identifier for the label that will have an iterable generated for it.
         """
-        try:
-            self[0][label]
-        except:
-            raise KeyError("Not a valid label.")
-        return np.array(list((molecule[label] for molecule in self.graph.values())))
+        if label == "pytorch":
+            return self.pytorch_dataloaders(**kwargs)
+        elif label == "sklearn":
+            return self.sklearn_data(**kwargs)
+        else:
+            return np.array(list((molecule[label] for molecule in self.graph.values())))
 
     def get_mutated_positions(self,positions):
         """
@@ -678,7 +680,7 @@ class Prograph():
         else:
             return copy.copy(self.tokenized)
 
-    def sklearn_data(self, data=None,idxs=None,split=0.8,scaler=False,shuffle=True):
+    def sklearn_data(self, data=None,idxs=None,split=0.8,scaler=False,shuffle=True,random_state=0):
         """
         Parameters
         ----------
@@ -701,6 +703,9 @@ class Prograph():
         shuffle : Bool, default=True
             Determines if the data will be shuffled prior to returning.
 
+        random_state : int, default=0
+            The random state seed used to shuffle the arrays.
+
         returns : x_train, y_train, x_test, y_test
             All Nx1 arrays with train as the first 80% of the shuffled data and test
             as the latter 20% of the shuffled data.
@@ -710,24 +715,22 @@ class Prograph():
         if data is not None:
             data = data
         elif idxs is not None:
-            data = copy.copy(self.tokenized[idxs])
+            tokenized,fitness = self("tokenized")[idx], self("Fitness")[idx]
         else:
-            data = copy.copy(self.tokenized)
+            tokenized,fitness = self("tokenized"), self("Fitness")
 
         if shuffle:
-            np.random.shuffle(data)
+            tokenized, fitness = skutils.shuffle(tokenized,fitness,random_state=random_state)
 
         if scaler:
-            fitnesses = data[:,-1].reshape(-1,1)
+            fitnesses = fitness.reshape(-1,1)
             scaler.fit(fitnesses)
-            data[:,-1] = scaler.transform(fitnesses).reshape(-1)
+            fitness = scaler.transform(fitnesses).reshape(-1)
 
-        split_point = int(len(data)*split)
-        train, test = data[:split_point], data[split_point:]
+        split_point = int(len(tokenized)*split)
 
-        # Y data selects only the last column of Data, X selects the rest
-        x_train, x_test = train[:,:-1], test[:,:-1]
-        y_train, y_test = train[:,-1],  test[:,-1]
+        x_train, x_test = tokenized[:split_point], tokenized[split_point:]
+        y_train, y_test = fitness[:split_point], fitness[split_point:]
 
         return x_train.astype("int"), y_train.astype("float"), \
                x_test.astype("int"),  y_test.astype("float")
@@ -806,20 +809,15 @@ class Prograph():
             Value used to assign ground truth status for algorithms such as GANs. 0 is the default
             to enable better gradient movement
         """
-        if tokenize:
-            stored_data = self.tokenized
-        else:
-            stored_data = self.data
-
         if idxs is not None:
-            data = copy.copy(stored_data[idxs])
+            tokenized,fitness = self("tokenized")[idx], self("Fitness")[idx]
         else:
-            data = copy.copy(stored_data)
+            tokenized,fitness = self("tokenized"), self("Fitness")
 
         if unsupervised:
-            labels = {torch.Tensor(x[:-1].astype('int8')).long() : real_label for x in data}
+            labels = {torch.Tensor(tokenized.astype('int8')).long() : real_label for x in data}
         else:
-            labels = {torch.Tensor(x[:-1].astype('int8')).long() : x[-1] for x in data}
+            labels = {torch.Tensor(tokenized.astype('int8')).long() : fitness for x in data}
 
         keys   = list(labels.keys())
 
@@ -852,7 +850,7 @@ class Prograph():
         Example Syntax - landscape.fit(LinearRegressor,{"fit_intercept" : True})
             Fits a sklearn linear regressor with the fit intercept attribute set to True.
         """
-        x_train, y_train, x_test, y_test = self.sklearn_data(**kwargs)
+        x_train, y_train, x_test, y_test = self("sklearn",**kwargs)
         model = model(**model_args)
         if model.__class__.__name__ == "NeuralNetRegressor":
             y_train, y_test = y_train.reshape(-1,1), y_test.reshape(-1,1)
@@ -866,14 +864,5 @@ class Prograph():
             self.learners[f"{model}"] = model
         return train_score, test_score
 
-    def __call__(self,mode="graph"):
-        self.mode = mode
-        return self
-
-    def __iter__(self):
-        # In order for this to work, sklearn_data and pytorch_dataloaders have to be their own classes with their own __iter__
-        # method
-        modes = {"graph" : self.graph,
-                 "sklearn" : self.sklearn_data,
-                 "pytorch" : self.pytorch_dataloaders}
-        return iter(modes.get(self.mode, "Not a valid mode."))
+    def __call__(self,label,**kwargs):
+        return self.label_iter(label,**kwargs)
