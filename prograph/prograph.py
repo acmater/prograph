@@ -1,22 +1,17 @@
-import numpy as np
-import pandas as pd
+import os
 import copy
 import time
+import torch
 import random
 import pickle
+import numpy as np
 import tqdm as tqdm
+import pandas as pd
 import networkx as nx
 import multiprocessing as mp
+from colorama import Fore, Style
 from functools import partial, reduce
 from .utils import Dataset, load, save
-import torch
-import os
-
-from colorama import Fore
-from colorama import Style
-
-from sklearn.metrics import mean_squared_error
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
@@ -114,8 +109,7 @@ class Prograph():
                                       "y_data" : "Fitness",
                                       "index_col" : None},
                       amino_acids='ACDEFGHIKLMNPQRSTVWY',
-                      saved_file=None
-                      ):
+                      saved_file=None):
         if saved_file:
             try:
                 print(f"Trying to load {saved_file}")
@@ -155,22 +149,19 @@ class Prograph():
         self.len             = len(sequences)
 
         if seed_seq:
-            self.seed_prot      = Protein(seed_seq)
+            self.seed      = Protein(seed_seq)
         else:
-            self.seed_id        = seed_id
-            self.seed_prot      = Protein(sequences[self.seed_id])
+            self.seed      = self.graph[0]
 
-        self.seed = self.seed_prot.seq
+        setattr(self.seed,"tokenized",tuple(self.tokenize(self.seed.seq)))
 
-        setattr(self.seed_prot,"tokenized",tuple(self.tokenize(self.seed_prot.seq)))
-
-        self.seq_len     = len(self.seed_prot.seq)
+        self.seq_len     = len(self.seed)
         self.tokenized = np.concatenate((self.tokenize_data(sequences),fitnesses.reshape(-1,1)),axis=1)
         self.update_graph([tuple(x) for x in self.tokenized[:,:-1]],"tokenized")
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
 
         self.mutated_positions = self.calc_mutated_positions()
-        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed_prot.seq)
+        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.seq)
         # Stratifies data into different hamming distances
 
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
@@ -218,7 +209,7 @@ class Prograph():
                    self.coloured_seed_string())
 
     def __repr__(self):
-        return f"""Protein_Landscape(seed_seq='{self.seed_prot.seq}',
+        return f"""Protein_Landscape(seed_seq='{self.seed.seq}',
                                   gen_graph={self.gen_graph},
                                   csv_path='{self.csv_path}',
                                   custom_columns={self.custom_columns},
@@ -228,6 +219,9 @@ class Prograph():
         return len(self.graph)
 
     def __getitem__(self,idx):
+        """
+        Customised __getitem__ that supports both integer and array indexing.
+        """
         if isinstance(idx, np.ndarray) or isinstance(idx, list):
             return {x : self.graph[x] for x in self.query(idx)}
         else:
@@ -302,8 +296,8 @@ class Prograph():
         Parameters
         ----------
         reference_seq : int, str, tuple
-                Any of the valid query inputs that select a single string. This will be used
-                to calculate all relative positions and distances.
+            Any of the valid query inputs that select a single string. This will be used
+            to calculate all relative positions and distances.
 
         distances : [int], default=None
             A list of integer distances that the dataset will return.
@@ -380,6 +374,18 @@ class Prograph():
         return self[self.graph[self.query(seq)]["neighbours"]]
 
     def label_iter(self, label):
+        """
+        Helper function that generates an iterable from the protein graph.
+
+        Parameters
+        ----------
+        label : str
+            A string identifier for the label that will have an iterable generated for it.
+        """
+        try:
+            self[0][label]
+        except:
+            raise KeyError("Not a valid label.")
         return np.array(list((molecule[label] for molecule in self.graph.values())))
 
     def get_distance(self,dist,d_data=None):
@@ -415,7 +421,7 @@ class Prograph():
             A protein sequence provided in any one of the formats that query can parse.
         """
         if seq is None:
-            seq = self.seed
+            seq = self.seed.seq
 
         else:
             seq = self.graph[self.query(seq)]["seq"]
@@ -499,7 +505,6 @@ class Prograph():
 
         Parameters
         ----------
-
         csvfile : str
             Path to CSV file that will be loaded
 
@@ -514,11 +519,12 @@ class Prograph():
         index_col : int, default=None
             Interger value, if provided, will determine the column to use as the index column
 
-        returns np.array (Nx2), where N is the number of rows in the csv file
+        Returns
+        -------
+        np.array (Nx2), where N is the number of rows in the csv file
             Returns an Nx2 array with the first column being x_data (sequences), and the second being
             y_data (fitnesses)
         """
-
         data         = pd.read_csv(csvfile,index_col=index_col)
         protein_data = data[[x_data,y_data]].to_numpy()
 
@@ -527,6 +533,14 @@ class Prograph():
     def tokenize(self,seq,tokenizer=None):
         """
         Simple static method which tokenizes an individual sequence
+
+        Parameters
+        ----------
+        seq : str
+            The sequence to be tokenized.
+
+        tokenizer : func, default=None
+            The function that will be used to tokenize the string.
         """
         if tokenizer == None:
             return [self.tokens[aa] for aa in seq]
@@ -556,7 +570,7 @@ class Prograph():
             self.tokenized is called, and the fitness column is removed by [:,:-1]
             Each column is then tested against the first
         """
-        mutated_bools = np.invert(np.all(self.tokenized[:,:-1] == self.tokenize(self.seed_prot.seq),axis=0)) # Calculates the indices all of arrays which are modified.
+        mutated_bools = np.invert(np.all(self.tokenized[:,:-1] == self.tokenize(self.seed.seq),axis=0)) # Calculates the indices all of arrays which are modified.
         mutated_idxs  = mutated_bools * np.arange(1,len(self.seed) + 1) # Shifts to the right so that zero can be counted as an idx
         return mutated_idxs[mutated_idxs != 0] - 1 # Shifts it back
 
@@ -567,7 +581,7 @@ class Prograph():
         """
         strs = []
         idxs = self.mutated_positions
-        for i,char in enumerate(self.seed_prot.seq):
+        for i,char in enumerate(self.seed.seq):
             if i in idxs:
                 strs.append(f"{Fore.GREEN}{char}{Style.RESET_ALL}")
             else:
@@ -575,6 +589,11 @@ class Prograph():
         return "".join(strs)
 
     def gen_mutation_arrays(self):
+        """
+        Generates mutation arrays
+
+        TODO finish writing docstrings
+        """
         leng = len(self.seed)
         xs = np.arange(leng*len(self.amino_acids))
         ys = np.array([[y for x in range(len(self.amino_acids))] for y in range(leng)]).flatten()
@@ -619,7 +638,6 @@ class Prograph():
 
         Parameters:
         -----------
-
         seq : int, str, tuple
             A sequence in any of the valid formats.
 
@@ -750,7 +768,6 @@ class Prograph():
         Parameters
         ----------
         tokenized : Bool, default=False
-
             Boolean value that determines if the raw or tokenized data will be returned.
         """
         if tokenized:
@@ -791,7 +808,6 @@ class Prograph():
             All Nx1 arrays with train as the first 80% of the shuffled data and test
             as the latter 20% of the shuffled data.
         """
-
         assert (0 <= split <= 1), "Split must be between 0 and 1"
 
         if data is not None:
@@ -810,15 +826,14 @@ class Prograph():
             data[:,-1] = scaler.transform(fitnesses).reshape(-1)
 
         split_point = int(len(data)*split)
-
-        # Y data selects only the last column of Data, X selects the rest
         train, test = data[:split_point], data[split_point:]
 
+        # Y data selects only the last column of Data, X selects the rest
         x_train, x_test = train[:,:-1], test[:,:-1]
-        y_train, y_test = train[:,-1], test[:,-1]
+        y_train, y_test = train[:,-1],  test[:,-1]
 
         return x_train.astype("int"), y_train.astype("float"), \
-               x_test.astype("int"), y_test.astype("float")
+               x_test.astype("int"),  y_test.astype("float")
 
     def gen_dataloaders(self,labels,keys,params,split_point):
         """
