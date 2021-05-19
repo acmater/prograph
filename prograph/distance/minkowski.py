@@ -2,6 +2,8 @@
 Minkowski distance calculator
 """
 import torch
+import numpy as np
+import tensorflow as tf
 
 def minkowski(X, Y, p=2):
     """
@@ -25,5 +27,8 @@ def minkowski(X, Y, p=2):
     """
     if isinstance(X,torch.Tensor):
         return torch.pow(torch.sum(torch.pow(X - Y[:,None,:],exponent=p),axis=2),exponent=1/p)
-    else: 
+    elif isinstance(X, tf.Tensor):
+        # Current issue with tf.pow not accepting non-integer arguments.
+        return tf.pow(tf.reduce_sum(tf.pow(X - Y[:,None,:],tf.constant(p,dtype=tf.float32)),axis=2),tf.constant(1/p,dtype=tf.float32))
+    else:
         return np.pow(np.sum(np.pow(X - Y[:,None,:],exponent=p),axis=2),exponent=1/p)

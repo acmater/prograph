@@ -134,6 +134,7 @@ setup(
                       'scipy>=1.6.2',
                       'scikit-learn>=0.24.1',
                       'torch>=1.8.1',
+                      'tensorflow>=2.4.1',
                       'colorama>=0.4.4',
                       'networkx>=2.5.1'
     ],

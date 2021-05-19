@@ -30,8 +30,6 @@ class TestQuery(unittest.TestCase):
 
 class TestIndexing(unittest.TestCase):
     def test_positions(self):
-        print("Basic position test")
-        print(pgraph.indexing(positions=[1,2]))
         assert len(pgraph.indexing(positions=[1,2])) == 99, "Positional Indexing is not working"
     def test_distances(self):
         assert len(pgraph.indexing(distances=3)) == 729, "Distance based indexing is not working"
