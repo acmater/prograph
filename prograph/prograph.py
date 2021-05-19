@@ -319,7 +319,7 @@ class Prograph():
         assert Bool == "or" or Bool == "and", "Not a valid boolean value."
 
         if reference_seq is None:
-            reference_seq   = self.seed_prot.seq
+            reference_seq   = self.seed.seq
             d_data          = self.d_data
         else:
             d_data          = self.gen_d_data(self.query(reference_seq))
