@@ -598,7 +598,9 @@ class Prograph():
         comp : <function _operator>, default=operator.eq
             The operator that will be used to compare the epsilon value and the batch of distances.
         """
-        gpu_tokenized = torch.as_tensor(self.tokenized.astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
+        if idxs is None:
+            idxs = torch.arange(len(self))
+        gpu_tokenized = torch.as_tensor(self.tokenized[idxs,:].astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
         results = []
         for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
             results.append([x.cpu().numpy() for x in torch.where(comp(hamming(gpu_tokenized,batch),eps))])
