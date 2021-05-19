@@ -170,7 +170,7 @@ class Prograph():
         self.d_data = self.gen_d_data()
 
         if self.gen_graph:
-            self.update_graph(self.build_graph(sequences, fitnesses),"neighbours")
+            self.update_graph(self.build_graph_gpu(),"neighbours")
 
         self.learners = {}
         print(self)
@@ -713,6 +713,43 @@ class Prograph():
         mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
         neighbours = list(pool.map(mapfunc,tqdm.tqdm(indexes)))
         return neighbours # The indices are stored as the first value of the tuple
+
+    @staticmethod
+    def get_every_n(a, n=2):
+        for i in range(a.shape[0] // n):
+            yield a[n*i:n*(i+1)]
+
+    @staticmethod
+    def prod_neighbours(index,out):
+        """
+        Function to convert output of np.where into arrays of neighbours.
+        """
+        results = {}
+        idxs,neighbours = out
+        idxs = idxs + (index * 8)
+        for idx in np.unique(idxs):
+            results[idx] = neighbours[np.where(idxs == idx)]
+        return results
+
+    def build_graph_gpu(self,idxs=None,batch_size=8):
+        gpu_tokenized = torch.as_tensor(self.tokenized[:,:-1].astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
+        results = []
+        for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
+            results.append([x.cpu().numpy() for x in torch.where(torch.sum(gpu_tokenized != batch[:,None,:],axis=2) == 1)])
+
+        final = []
+        for idx, result in enumerate(results):
+            final.append(self.prod_neighbours(idx,result))
+
+        neighbour_dict = {k: v for d in final for k, v in d.items()}
+        completed = []
+        for i in range(len(gpu_tokenized)):
+            completed.append(neighbour_dict.get(i,np.array([],dtype=np.int)))
+
+        return completed
+
+
+
 
     def graph_to_networkx(self,labels=None,update_self=False,iterable="seq"):
         """
