@@ -4,6 +4,7 @@ import time
 import torch
 import random
 import pickle
+import operator
 import numpy as np
 import tqdm as tqdm
 import pandas as pd
@@ -156,14 +157,16 @@ class Prograph():
         self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.seq)
         # Stratifies data into different hamming distances
 
-        # Contains the information to provide all mutants 1 amino acid away for a given sequence
         self.mutation_arrays  = self.gen_mutation_arrays()
+
+
+        # Contains the information to provide all mutants 1 amino acid away for a given sequence
         self.len = len(self)
 
         self.d_data = self.gen_d_data()
 
         if self.gen_graph:
-            self.update_graph(self.build_graph_gpu(),"neighbours")
+            self.update_graph(self.build_graph(),"neighbours")
 
         self.learners = {}
         print(self)
@@ -203,9 +206,9 @@ class Prograph():
 
     def __repr__(self):
         return f"""Protein_Landscape(seed_seq='{self.seed.seq}',
-                                  gen_graph={self.gen_graph},
+                                  gen_graph='{self.gen_graph}'
                                   csv_path='{self.csv_path}',
-                                  custom_columns={self.custom_columns},
+                                  columns={self.columns},
                                   amino_acids='{self.amino_acids}')"""
 
     def __len__(self):
@@ -269,6 +272,18 @@ class Prograph():
 
         else:
             return idx
+
+
+    def gen_mutation_arrays(self):
+        """
+        Generates mutation arrays
+
+        TODO finish writing docstrings
+        """
+        xs = np.arange(self.seq_len*len(self.amino_acids))
+        ys = np.array([[y for x in range(len(self.amino_acids))] for y in range(self.seq_len)]).flatten()
+        modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(self.seq_len)]).flatten()
+        return (xs, ys, modifiers)
 
     def positions(self,positions):
         return self.indexing(positions=positions)
@@ -362,6 +377,63 @@ class Prograph():
         else:
             return idxs
 
+
+    def hamming_array(self,seq=None,idxs=None):
+        """
+        Function to calculate the hamming distances of every array using vectorized
+        operations
+
+        Function operates by building an array of the (Nxlen(seed sequence)) with
+        copies of the tokenized seed sequence.
+
+        This array is then compared elementwise with the tokenized data, setting
+        all places where they don't match to False. This array is then inverted,
+        and summed, producing an integer representing the difference for each string.
+
+        Parameters:
+        -----------
+        seq : str, int, tuple
+            Any valid sequence representation (see query for valid formats)
+
+        idxs : np.array[int]
+            A numpy integer index array
+        """
+        if seq is None:
+            tokenized_seq = self.tokenized[0]
+        else:
+            tokenized_seq = self.tokenized[self.query(seq)]
+
+        if idxs is not None:
+            data = self.tokenized[idxs]
+        else:
+            data = self.tokenized
+
+        hammings = np.sum(data != tokenized_seq,axis=1)
+
+        return hammings
+
+
+    def generate_mutations(self,seq):
+        """
+        Takes a sequence and generates all possible mutants 1 Hamming distance away
+        using array substitution
+
+        Parameters:
+        -----------
+        seq : np.array[int]
+            Tokenized sequence array
+        """
+        seq = self.tokenized[self.query(seq)]
+        seed = self.seed
+        hold_array = np.zeros(((self.seq_len*len(self.amino_acids)),self.seq_len))
+        for i,char in enumerate(seq):
+            hold_array[:,i] = char
+
+        xs, ys, mutations = self.mutation_arrays
+        hold_array[(xs,ys)] = mutations
+        copies = np.invert(np.all(hold_array == seq,axis=1))
+        return hold_array[copies]
+
     def neighbours(self, seq, keys=[["seq"]]):
         """ A simple wrapper function that will return the dictionary containing neighbours for a particular sequence """
         return self[self.graph[self.query(seq)]["neighbours"]]
@@ -396,8 +468,7 @@ class Prograph():
         if d_data is None:
             d_data = self.d_data
 
-        assert dist in d_data.keys(), "Not a valid distance for this dataset"
-        return d_data[dist]
+        return d_data.get(dist,"Not a valid distance for this dataset")
 
     def gen_d_data(self,seq=None) -> dict:
         """
@@ -451,45 +522,6 @@ class Prograph():
         # This line checks only the positions that have to be constant, and ensures that they all are
 
         return mutated_indexes
-
-    @staticmethod
-    def distance(str1, str2):
-        """Calculates the Hamming distance between 2 strings"""
-        return sum(c1 != c2 for c1, c2 in zip(str1, str2))
-
-    def hamming_array(self,seq=None,idxs=None):
-        """
-        Function to calculate the hamming distances of every array using vectorized
-        operations
-
-        Function operates by building an array of the (Nxlen(seed sequence)) with
-        copies of the tokenized seed sequence.
-
-        This array is then compared elementwise with the tokenized data, setting
-        all places where they don't match to False. This array is then inverted,
-        and summed, producing an integer representing the difference for each string.
-
-        Parameters:
-        -----------
-        seq : str, int, tuple
-            Any valid sequence representation (see query for valid formats)
-
-        idxs : np.array[int]
-            A numpy integer index array
-        """
-        if seq is None:
-            tokenized_seq = self.tokenized[0]
-        else:
-            tokenized_seq = self.tokenized[self.query(seq)]
-
-        if idxs is not None:
-            data = self.tokenized[idxs]
-        else:
-            data = self.tokenized
-
-        hammings = np.sum(np.invert(data == tokenized_seq),axis=1)
-
-        return hammings
 
     @staticmethod
     def csvDataLoader(csvfile,seqs_col,columns="all",index_col=None,):
@@ -554,7 +586,7 @@ class Prograph():
         return np.array([[tokens[aa] for aa in seq] for seq in sequences])
 
     def boolean_mutant_array(self,seq=None):
-        return np.invert(self.tokenized == self.tokenized[self.query(seq)])
+        return self.tokenized != self.tokenized[self.query(seq)]
 
     def calc_mutated_positions(self):
         """
@@ -583,131 +615,28 @@ class Prograph():
                 strs.append("{0}".format(char))
         return "".join(strs)
 
-    def gen_mutation_arrays(self):
-        """
-        Generates mutation arrays
-
-        TODO finish writing docstrings
-        """
-        leng = len(self.seed)
-        xs = np.arange(leng*len(self.amino_acids))
-        ys = np.array([[y for x in range(len(self.amino_acids))] for y in range(leng)]).flatten()
-        modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(leng)]).flatten()
-        return (xs, ys, modifiers)
-
-    def generate_mutations(self,seq):
-        """
-        Takes a sequence and generates all possible mutants 1 Hamming distance away
-        using array substitution
-
-        Parameters:
-        -----------
-        seq : np.array[int]
-            Tokenized sequence array
-        """
-        seq = self.tokenized[self.query(seq)]
-        seed = self.seed
-        hold_array = np.zeros(((len(seed)*len(self.amino_acids)),len(seed)))
-        for i,char in enumerate(seq):
-            hold_array[:,i] = char
-
-        xs, ys, mutations = self.mutation_arrays
-        hold_array[(xs,ys)] = mutations
-        copies = np.invert(np.all(hold_array == seq,axis=1))
-        return hold_array[copies]
 
     ############################################################################
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,seq,token_dict=None,explicit_neighbours=True,idxs=None):
+    def calc_neighbours(self,seq,eps=1,comp=operator.eq):
         """
-        Takes a sequence and checks all possible neighbours against the ones that are actually present within the dataset.
+        Calcualtes the neighbours for a given sequence in the presence of a cutoff value.
 
-        There is a particular design decision here that makes it fast in some cases, and slow in others.
-        Instead of checking the entire dataset to see if there are any neighbours present, it calculates all
-        possible neighbours, and checks to see if any of them match entries in the dataset.
+        Parameters
+        ----------
+        seq : str, int, tup
+            An identifier for the string of interest
 
-        The number of possible neighbours for a given sequence is far smaller than the size of the dataset in almost
-        all cases, which makes this approach significantly faster.
+        eps : int, float
+            The distance cutoff for the two to be considered neighbours
 
-        Parameters:
-        -----------
-        seq : int, str, tuple
-            A sequence in any of the valid formats.
-
-        token_dict : {tuple(tokenized_representation) : int}, default=None
-            A token dictionary that matches each tokenized sequence to its integer index.
-
-        explicit_neighbours : Bool, default=True
-            How the graph is calculated. Explicit neighbours means that it will generate all
-            possible neighbours then check to see if they're in the dataset. Otherwise it will check
-            each sequence in the dataset against each other sequence.
+        comp : <function _operator>, default=operator.eq
+            An operator function that will be used to compare the epsilon value to the comparison vector.
         """
-        if token_dict is None:
-            token_dict = self.token_dict
+        return np.where(comp(np.sum(self.tokenized != self.tokenized[self.query(seq)],axis=1),eps))[0]
 
-        if explicit_neighbours:
-            possible_neighbours = self.generate_mutations(seq)
-            actual_neighbours   = np.sort([token_dict[tuple(key)] for key in possible_neighbours if tuple(key) in token_dict])
-
-        else:
-            actual_neighbours = np.where(self.hamming_array(self.query(seq),idxs=idxs) == 1)[0]
-
-        return actual_neighbours
-
-    def build_graph(self,sequences, fitnesses,idxs=None,single_thread=False):
-        """
-        Efficiently builds the graph of the protein landscape. There are two ways to build
-        graphs for protein networks. The first considers the entire data sequence and calculates
-        the Hamming distance for each pair (once) and uses this information to identify the neighbours.
-
-        The second is to explicitly produce the neighbours, and then check to see if any of them are
-        in the dataset. The second approach is typically vastly quicker. The reason for this is that even for
-        an enormous protein (500 AAs) with the full 20 canonical amino acids and possible mutants, there are only
-        10000 neighbours to generate and then perform in membership checking on.
-
-        Most protein datasets have 10s to 100s of thousands of entries, and as such, this approach leads to dramatic
-        speed ups.
-
-        Parameters:
-        -----------
-        idxs : np.array[int]
-            An array of integers that are used to index the complete dataset
-            and provide a subset to construct a subgraph of the full dataset.
-        """
-
-        if idxs is None:
-            print("Building Protein Graph for entire dataset")
-            token_dict = self.token_dict
-            pool = mp.Pool(mp.cpu_count())
-            indexes = np.array(range(len(self)))
-
-        else:
-            print("Building Protein Graph For subset of length {}".format(sum(idxs)))
-            dataset = self.tokenized[idxs]
-            token_dict = {key : value for key,value in self.token_dict.items() if value in idxs}
-            if len(idxs) < 100000:
-                pool = mp.Pool(4)
-            else:
-                pool = mp.Pool(mp.cpu_count())
-            indexes = [x for x in idxs]
-
-        # This section roughly estimates the cost of the two different approaches to calculating the graph
-        # representation of the dataset, and determines which to use based around whichever will result in
-        # fewer total operations.
-
-        calculating_explicit_neighbours = len(self.amino_acids) * len(self.seed) * len(self)
-        calculating_implicit_neighbours = len(self) ** 2
-
-        if calculating_explicit_neighbours >= 10*calculating_implicit_neighbours:
-            explicit_neighbours=False
-        else:
-            explicit_neighbours=True
-
-        mapfunc = partial(self.calc_neighbours,token_dict=token_dict,explicit_neighbours=explicit_neighbours,idxs=indexes)
-        neighbours = list(pool.map(mapfunc,tqdm.tqdm(indexes)))
-        return neighbours # The indices are stored as the first value of the tuple
 
     @staticmethod
     def get_every_n(a, n=2):
@@ -726,7 +655,7 @@ class Prograph():
             results[idx] = neighbours[np.where(idxs == idx)]
         return results
 
-    def build_graph_gpu(self,idxs=None,batch_size=8):
+    def build_graph(self,idxs=None,batch_size=8):
         gpu_tokenized = torch.as_tensor(self.tokenized.astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
         results = []
         for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
@@ -742,8 +671,6 @@ class Prograph():
             completed.append(neighbour_dict.get(i,np.array([],dtype=np.int)))
 
         return completed
-
-
 
 
     def graph_to_networkx(self,labels=None,update_self=False,iterable="seq"):
@@ -812,7 +739,6 @@ class Prograph():
         Parameters
         ----------
         data : np.array(NxM+1), default=None
-
             Optional data array that will be split. Added to the function to enable it
             to interface with lengthen sequences.
 
@@ -820,23 +746,18 @@ class Prograph():
             M is the sequence length, and the +1 captures the extra column for the fitnesses
 
         distance : int or [int], default=None
-
             The specific distance (or distances) from the seed sequence that the data should be sampled from.
 
         positions : [int], default=None
-
             The specific mutant positions that the data will be sampled from
 
         split : float, default=0.8, range [0-1]
-
             The split point for the training - validation data.
 
         shuffle : Bool, default=True
-
             Determines if the data will be shuffled prior to returning.
 
         returns : x_train, y_train, x_test, y_test
-
             All Nx1 arrays with train as the first 80% of the shuffled data and test
             as the latter 20% of the shuffled data.
         """
@@ -875,19 +796,15 @@ class Prograph():
         Parameters
         ----------
         labels : dict, {seq[could be tokenized] : fitness}
-
             Label dictionary that links all sequence labels with fitness values
 
         keys : list, [seqs]
-
             List of all sequences, used as keys in dataset
 
         params : dict, {param : value}
-
             Dictionary of dataloader parameters that are unpacked into PyTorch dataloader class
 
         split_point : float, default=0.8, 0 <= split_point <= 1
-
             Determines what fraction of data goes into training and test dataloaders
 
         Returns
@@ -920,36 +837,28 @@ class Prograph():
         Parameters:
         -----------
         tokenize : Bool, default=True
-
             Determines if the dataloaders should return tokenized values or not
 
         split_point : float, default=0.8, 0 <= split_point <= 1
-
             Determines what fraction of data goes into training and test dataloaders
 
         idxs : np.array[int], default=None
-
             Indexes which will be used to create a subset of the data before the other operations are applied.
 
         distance : int or [int], default=False
-
             A single, or list of integers that specify the distances from the seed sequence
             that will be returned in the dataloader
 
         positions : [int], default=None
-
             A list of integers which specify mutated positions in the sequence.
 
         params : dict, {param : value}
-
             Dictionary of dataloader parameters that are unpacked into PyTorch dataloader class
 
         unsupervised : Bool, default=False
-
             Determines if the dataloaders that should be returned will have placeholder fitnesses
 
         real_label : Bool, default=0
-
             Value used to assign ground truth status for algorithms such as GANs. 0 is the default
             to enable better gradient movement
         """

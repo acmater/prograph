@@ -51,7 +51,9 @@ class TestDistanceGeneration(unittest.TestCase):
         out = pgraph[pgraph.get_distance(dist=0,d_data=pgraph.gen_d_data(seq="ACL"))]
         assert out[19]["seq"] == 'ACL'
     def test_calc_neighnours(self):
-        assert np.all(pgraph.calc_neighbours(seq="ACL",explicit_neighbours=False)[1] == pgraph.calc_neighbours(seq="ACL",explicit_neighbours=True)[1]), "Calc neighbours has an error"
+        print(pgraph["ACL"]["neighbours"])
+        print(pgraph.calc_neighbours(seq="ACL"))
+        assert np.all(pgraph.calc_neighbours(seq="ACL") == pgraph["ACL"]["neighbours"]), "Calc neighbours has an error"
 
 class TestPyTorchDataLoaders(unittest.TestCase):
     def test_pytorch_dataloader_generation(self):
