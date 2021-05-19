@@ -20,7 +20,7 @@ class TestQuery(unittest.TestCase):
     def test_int_idx(self):
         assert pgraph[26]["seq"] == "ADH", "Integer indexing has failed"
     def test_tuple_idx(self):
-        assert pgraph[(0,1,1)]["seq"] == "ACC", "Tuple indexing has failed"
+        assert pgraph[(1,2,2)]["seq"] == "ACC", "Tuple indexing has failed"
     def test_len(self):
         assert len(pgraph) == 1000, "__getitem__ method is failing"
     def test_list(self):
@@ -115,6 +115,17 @@ class TestSavePrograph(unittest.TestCase):
         new_pgraph = load("test.pkl")
         assert new_pgraph[0]["seq"] == "AAA", "Graph loaded following saving is not functioning correctly."
         os.remove("test.pkl")
+
+class TestTokenization(unittest.TestCase):
+    def test_basic_tokenization(self):
+        assert np.all(pgraph.tokenize("ACA") == np.array([1,2,1])), "Basic tokenization is not working correctly."
+    def test_batch_tokenization(self):
+        assert np.all(pgraph.tokenize(["ACA","ACC"]) == np.array([[1,2,1],[1,2,2]])), "Batch tokenization is not working."
+    def test_variable_length_tokenization(self):
+        tokens = pgraph.tokenize(["ACCCACAAA","ACAA"])
+        assert np.all(tokens == np.array([[1, 2, 2, 2, 1, 2, 1, 1, 1],[1, 2, 1, 1, 0, 0, 0, 0, 0]])), "Variable length tokenization is not working correctly."
+    def test_empty_tokenization(self):
+        assert len(pgraph.tokenize([])) == 0, "Tokenizing an empty object is not returning an empty object."
 
 if __name__ == "__main__":
     unittest.main()

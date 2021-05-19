@@ -136,7 +136,7 @@ class Prograph():
         self.amino_acids     = amino_acids
         self.gen_graph       = gen_graph
         self.columns         = columns
-        self.tokens          = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
+        self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
         self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
 
         for axis in columns:
@@ -151,7 +151,7 @@ class Prograph():
         self.seq_len = len(self.seed)
         self.len = len(self)
 
-        self.tokenized = self.tokenize_data(sequences)
+        self.tokenized = self.tokenize(sequences)
         self.update_graph([tuple(x) for x in self.tokenized],"tokenized")
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized)}
 
@@ -471,7 +471,7 @@ class Prograph():
         protein_data = data[columns]
         return sequences, protein_data
 
-    def tokenize(self,seq,tokenizer=None):
+    def custom_tokenize(self,seq,tokenizer=None):
         """
         Simple static method which tokenizes an individual sequence
 
@@ -484,20 +484,31 @@ class Prograph():
             The function that will be used to tokenize the string.
         """
         if tokenizer == None:
-            return np.array([self.tokens[aa] for aa in seq])
+            return np.array([self.tokens[aa.encode("utf-8")] for aa in seq])
         else:
             return "This feature is not ready yet"
 
-    def tokenize_data(self, sequences):
+    def tokenize(self, sequences):
         """
-        Takes an iterable of sequences provided as one amino acid strings and returns
+        Takes any number of sequences provided as one amino acid strings and returns
         an array of their tokenized form.
 
-        Note : The tokenize function is not called and the tokens value is regenerated
-        as it removes a lot of attribute calls and speeds up the operation.
+        Sequences can be of varying length and the shorter sequences will be padded
+        with zeros.
+
+        Parameters
+        ----------
+        sequences : str, iterable, np.array
+            The sequences that will be tokenized using self.tokens
         """
-        tokens = self.tokens
-        return np.array([[tokens[aa] for aa in seq] for seq in sequences])
+         # Convert list  or array of strings into individual char byte array
+        sequences = np.array(sequences,dtype="bytes").reshape(-1,1).view("S1")
+        # Initiailise empty tokenized array
+        tokenized = np.zeros(sequences.shape,dtype=int)
+        for char, token in self.tokens.items():
+            tokenized[np.where(sequences == char)] = token
+
+        return tokenized
 
     def boolean_mutant_array(self,seq=None):
         return self.tokenized != self.tokenized[self.query(seq)]
@@ -572,7 +583,7 @@ class Prograph():
         (nearest Protein, distance)
         """
         distances = hamming(self.tokenized,self.tokenize(seq).reshape(1,-1))
-        idx = np.argmin(distances)
+        idx = np.argmin(distances,axis=1)
         return self[idx], np.min(distances)
 
     @staticmethod
