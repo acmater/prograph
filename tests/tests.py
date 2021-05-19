@@ -94,13 +94,13 @@ class TestIndexingOperations(unittest.TestCase):
 
 class TestNetworkx(unittest.TestCase):
     def test_networkx_generation(self):
-        pgraph.graph_to_networkx(labels=["fitness","tokenized"],update_self=True)
-        assert "fitness" in pgraph.networkx_graph.nodes["AAA"].keys(), "Networkx graph generation is not working."
+        pgraph.graph_to_networkx(labels=["Fitness","tokenized"],update_self=True)
+        assert "Fitness" in pgraph.networkx_graph.nodes["AAA"].keys(), "Networkx graph generation is not working."
 
 class TestLoadPrograph(unittest.TestCase):
     def test_load_pgraph(self):
         pgraph = Prograph(saved_file="data/synthetic_data.pkl")
-        assert pgraph[0]["fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
+        assert pgraph[0]["Fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
     def test_load_wrong_type(self):
         with self.assertRaises(AssertionError) and self.assertRaises(FileNotFoundError):
             pgraph = Prograph(saved_file=2)

@@ -102,12 +102,10 @@ class Prograph():
     """
     def __init__(self,data=None,
                       seed_seq=None,
-                      seed_id=0,
                       gen_graph=False,
                       csv_path=None,
-                      custom_columns={"x_data" : "Sequence",
-                                      "y_data" : "Fitness",
-                                      "index_col" : None},
+                      seqs_col="Sequence",
+                      columns=["Fitness"],
                       amino_acids='ACDEFGHIKLMNPQRSTVWY',
                       saved_file=None):
         if saved_file:
@@ -123,42 +121,36 @@ class Prograph():
             return
 
         if csv_path and data:
-            print("""Both a filepath and a data array has been provided. The CSV is
-                     given higher priority so the data will be overwritten by this
-                     if possible""")
+            print(f"""Both a filepath ({csv_path}) and a data array has been provided. The CSV is
+                     given higher priority so the data will be overwritten by this.""")
             self.csv_path = csv_path
-            data = self.csvDataLoader(csv_path,**custom_columns)
+            sequences, prot_data = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns)
 
         elif csv_path:
             self.csv_path = csv_path
-            data = self.csvDataLoader(csv_path,**custom_columns)
+            sequences, prot_data = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns)
 
-        sequences            = data[:,0]
-        fitnesses            = data[:,1]
-
-        self.gen_graph       = gen_graph
-
-        #### Tokenizing
         self.amino_acids     = amino_acids
-        self.custom_columns  = custom_columns
+        self.gen_graph       = gen_graph
+        self.columns         = columns
         self.tokens          = {x:y for x,y in zip(self.amino_acids, list(range(len(self.amino_acids))))}
-
         self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
-        self.update_graph(fitnesses,"fitness")
+
+        for axis in columns:
+            self.update_graph(prot_data[axis],axis)
+        # This is a reverse of the graph dictionary to support querying by sequence instead of index
         self.seq_idxs        = {seq : idx for idx, seq in enumerate(sequences)}
-        self.len             = len(sequences)
 
         if seed_seq:
-            self.seed      = Protein(seed_seq)
+            self.seed        = Protein(seed_seq)
         else:
-            self.seed      = self.graph[0]
+            self.seed        = self.graph[0]
+        self.seq_len = len(self.seed)
+        self.len = len(self)
 
-        setattr(self.seed,"tokenized",tuple(self.tokenize(self.seed.seq)))
-
-        self.seq_len     = len(self.seed)
-        self.tokenized = np.concatenate((self.tokenize_data(sequences),fitnesses.reshape(-1,1)),axis=1)
-        self.update_graph([tuple(x) for x in self.tokenized[:,:-1]],"tokenized")
-        self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized[:,:-1])}
+        self.tokenized = self.tokenize_data(sequences)
+        self.update_graph([tuple(x) for x in self.tokenized],"tokenized")
+        self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized)}
 
         self.mutated_positions = self.calc_mutated_positions()
         self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.seq)
@@ -166,6 +158,7 @@ class Prograph():
 
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
         self.mutation_arrays  = self.gen_mutation_arrays()
+        self.len = len(self)
 
         self.d_data = self.gen_d_data()
 
@@ -260,7 +253,7 @@ class Prograph():
 
         elif isinstance(sequence, tuple):
             assert len(sequence) == self.seq_len, "Tuple not valid length for dataset"
-            check = np.where(np.all(sequence == self.tokenized[:,:-1],axis=1))[0]
+            check = np.where(np.all(sequence == self.tokenized,axis=1))[0]
             assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
             idx = int(check)
 
@@ -485,21 +478,21 @@ class Prograph():
             A numpy integer index array
         """
         if seq is None:
-            tokenized_seq = self.tokenized[0,:-1]
+            tokenized_seq = self.tokenized[0]
         else:
-            tokenized_seq = self.tokenized[self.query(seq),:-1]
+            tokenized_seq = self.tokenized[self.query(seq)]
 
         if idxs is not None:
-            data = self.tokenized[idxs,:-1]
+            data = self.tokenized[idxs]
         else:
-            data = self.tokenized[:,:-1]
+            data = self.tokenized
 
         hammings = np.sum(np.invert(data == tokenized_seq),axis=1)
 
         return hammings
 
     @staticmethod
-    def csvDataLoader(csvfile,x_data,y_data,index_col):
+    def csvDataLoader(csvfile,seqs_col,columns="all",index_col=None,):
         """Simple helper function to load NK landscape data from CSV files into numpy arrays.
         Supply outputs to sklearn_split to tokenise and split into train/test split.
 
@@ -526,9 +519,11 @@ class Prograph():
             y_data (fitnesses)
         """
         data         = pd.read_csv(csvfile,index_col=index_col)
-        protein_data = data[[x_data,y_data]].to_numpy()
-
-        return protein_data
+        sequences    = data[seqs_col].to_numpy()
+        if columns == "all":
+            columns = list(data.keys()).remove(seqs_col)
+        protein_data = data[columns]
+        return sequences, protein_data
 
     def tokenize(self,seq,tokenizer=None):
         """
@@ -559,7 +554,7 @@ class Prograph():
         return np.array([[tokens[aa] for aa in seq] for seq in sequences])
 
     def boolean_mutant_array(self,seq=None):
-        return np.invert(self.tokenized[:,:-1] == self.tokenized[self.query(seq),:-1])
+        return np.invert(self.tokenized == self.tokenized[self.query(seq)])
 
     def calc_mutated_positions(self):
         """
@@ -570,7 +565,7 @@ class Prograph():
             self.tokenized is called, and the fitness column is removed by [:,:-1]
             Each column is then tested against the first
         """
-        mutated_bools = np.invert(np.all(self.tokenized[:,:-1] == self.tokenize(self.seed.seq),axis=0)) # Calculates the indices all of arrays which are modified.
+        mutated_bools = np.invert(np.all(self.tokenized == self.tokenize(self.seed.seq),axis=0)) # Calculates the indices all of arrays which are modified.
         mutated_idxs  = mutated_bools * np.arange(1,len(self.seed) + 1) # Shifts to the right so that zero can be counted as an idx
         return mutated_idxs[mutated_idxs != 0] - 1 # Shifts it back
 
@@ -610,7 +605,7 @@ class Prograph():
         seq : np.array[int]
             Tokenized sequence array
         """
-        seq = self.tokenized[self.query(seq),:-1]
+        seq = self.tokenized[self.query(seq)]
         seed = self.seed
         hold_array = np.zeros(((len(seed)*len(self.amino_acids)),len(seed)))
         for i,char in enumerate(seq):
@@ -690,7 +685,7 @@ class Prograph():
 
         else:
             print("Building Protein Graph For subset of length {}".format(sum(idxs)))
-            dataset = self.tokenized[idxs,:-1]
+            dataset = self.tokenized[idxs]
             token_dict = {key : value for key,value in self.token_dict.items() if value in idxs}
             if len(idxs) < 100000:
                 pool = mp.Pool(4)
@@ -732,7 +727,7 @@ class Prograph():
         return results
 
     def build_graph_gpu(self,idxs=None,batch_size=8):
-        gpu_tokenized = torch.as_tensor(self.tokenized[:,:-1].astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
+        gpu_tokenized = torch.as_tensor(self.tokenized.astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
         results = []
         for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
             results.append([x.cpu().numpy() for x in torch.where(torch.sum(gpu_tokenized != batch[:,None,:],axis=2) == 1)])
