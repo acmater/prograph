@@ -16,6 +16,7 @@ from .utils import Dataset, load, save
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
+from .distance import hamming
 
 class Prograph():
     """
@@ -659,7 +660,7 @@ class Prograph():
         gpu_tokenized = torch.as_tensor(self.tokenized.astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
         results = []
         for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-            results.append([x.cpu().numpy() for x in torch.where(torch.sum(gpu_tokenized != batch[:,None,:],axis=2) == 1)])
+            results.append([x.cpu().numpy() for x in torch.where(hamming(gpu_tokenized,batch) == 1)])
 
         final = []
         for idx, result in enumerate(results):
