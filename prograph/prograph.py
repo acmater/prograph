@@ -810,14 +810,14 @@ class Prograph():
             to enable better gradient movement
         """
         if idxs is not None:
-            tokenized,fitness = self("tokenized")[idx], self("Fitness")[idx]
+            tokenized,fitness = self("tokenized")[idxs], self("Fitness")[idxs]
         else:
             tokenized,fitness = self("tokenized"), self("Fitness")
 
         if unsupervised:
-            labels = {torch.Tensor(tokenized.astype('int8')).long() : real_label for x in data}
+            labels = {torch.Tensor(tokenize.astype('int8')).long() : real_label for tokenize in tokenized}
         else:
-            labels = {torch.Tensor(tokenized.astype('int8')).long() : fitness for x in data}
+            labels = {torch.Tensor(tokenize.astype('int8')).long() : fit for tokenize,fit in zip(tokenized,fitness)}
 
         keys   = list(labels.keys())
 
