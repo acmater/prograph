@@ -484,7 +484,7 @@ class Prograph():
             The function that will be used to tokenize the string.
         """
         if tokenizer == None:
-            return [self.tokens[aa] for aa in seq]
+            return np.array([self.tokens[aa] for aa in seq])
         else:
             return "This feature is not ready yet"
 
@@ -546,11 +546,34 @@ class Prograph():
         eps : int, float
             The distance cutoff for the two to be considered neighbours
 
+        distance : <function>, default=hamming
+            A distance function that must match the syntax of those in the distance module.
+
         comp : <function _operator>, default=operator.eq
             An operator function that will be used to compare the epsilon value to the comparison vector.
         """
         return np.where(comp(hamming(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
 
+    def nn(self,seq,distance=hamming):
+        # TODO - UPDATE THIS METHOD SO THAT IT CAN TAKE BATCHES
+        """
+        Calculates the nearest neighbour a sequence to the dataset in accordance with a given distance metric.
+
+        Parameters
+        ----------
+        seq : str, int, tup
+            An identifier for the string of interest
+
+        distance : <function>, default=hamming
+            A distance function that must match the syntax of those in the distance module.
+
+        Returns
+        -------
+        (nearest Protein, distance)
+        """
+        distances = hamming(self.tokenized,self.tokenize(seq).reshape(1,-1))
+        idx = np.argmin(distances)
+        return self[idx], np.min(distances)
 
     @staticmethod
     def get_every_n(a, n=2):
@@ -680,7 +703,13 @@ class Prograph():
         else:
             return copy.copy(self.tokenized)
 
-    def sklearn_data(self, data=None,idxs=None,split=0.8,scaler=False,shuffle=True,random_state=0):
+    def sklearn_data(self,
+                     data=None,
+                     idxs=None,
+                     split=[0.8,0,0.2],
+                     scaler=False,
+                     shuffle=True,
+                     random_state=0):
         """
         Parameters
         ----------
@@ -697,8 +726,8 @@ class Prograph():
         positions : [int], default=None
             The specific mutant positions that the data will be sampled from
 
-        split : float, default=0.8, range [0-1]
-            The split point for the training - validation data.
+        split : [float], default=[0.8,0,0.2], range [0-1,0-1,0-1]
+            The data percentage in the [training,validation,testing] data.
 
         shuffle : Bool, default=True
             Determines if the data will be shuffled prior to returning.
@@ -706,11 +735,15 @@ class Prograph():
         random_state : int, default=0
             The random state seed used to shuffle the arrays.
 
-        returns : x_train, y_train, x_test, y_test
+        returns : x_train, y_train, x_val, y_val, x_test, y_test
             All Nx1 arrays with train as the first 80% of the shuffled data and test
             as the latter 20% of the shuffled data.
+
+            # TODO Stop autograbbing fitness and tokenized - let user specify the two values
         """
-        assert (0 <= split <= 1), "Split must be between 0 and 1"
+        if isinstance(split,int):
+            split = [split,0,1-split]
+        assert sum(split) <= 1, "The sum of the split terms must be between 0 and 1"
 
         if data is not None:
             data = data
@@ -727,15 +760,16 @@ class Prograph():
             scaler.fit(fitnesses)
             fitness = scaler.transform(fitnesses).reshape(-1)
 
-        split_point = int(len(tokenized)*split)
+        split1, split2 = int(len(tokenized)*split[0]), int(len(tokenized)*sum(split[:2]))
 
-        x_train, x_test = tokenized[:split_point], tokenized[split_point:]
-        y_train, y_test = fitness[:split_point], fitness[split_point:]
+        x_train, x_val, x_test = tokenized[:split1], tokenized[split1:split2], tokenized[split2:]
+        y_train, y_val, y_test = fitness[:split1],   fitness[split1:split2],  fitness[split2:]
 
         return x_train.astype("int"), y_train.astype("float"), \
+               x_val.astype("int"),   y_val.astype("float"), \
                x_test.astype("int"),  y_test.astype("float")
 
-    def gen_dataloaders(self,labels,keys,params,split_point):
+    def gen_dataloaders(self,labels,keys,params,split_points):
         """
         Function that generates PyTorch dataloaders from a labels dictionary and a list of keys
         with an associated parameter dictionary.
@@ -758,8 +792,11 @@ class Prograph():
         -------
             Returns a training and testing dataloader
         """
-        partition = {"train" : keys[:int(len(keys)*split_point)],
-                     "test"  : keys[int(len(keys)*split_point):]}
+        split1, split2 = split_points
+
+        partition = {"train" : keys[:split1],
+                     "val"   : keys[split1:split2],
+                     "test"  : keys[split2:]}
         training_set = Dataset(partition["train"], labels)
         training_generator = torch.utils.data.DataLoader(training_set, **params)
         test_set = Dataset(partition["test"], labels)
@@ -768,7 +805,7 @@ class Prograph():
 
     def pytorch_dataloaders(self,
                             tokenize=True,
-                            split_point=0.8,
+                            split=[0.8,0,0.2],
                             idxs=None,
                             distance=False,
                             positions=None,
@@ -821,7 +858,9 @@ class Prograph():
 
         keys   = list(labels.keys())
 
-        return self.gen_dataloaders(labels=labels, keys=keys, params=params, split_point=split_point)
+        split_points = [int(len(tokenized)*split[0]), int(len(tokenized)*sum(split[:2]))]
+
+        return self.gen_dataloaders(labels=labels, keys=keys, params=params, split_points=split_points)
 
     ############################################################################
     ############################ Machine Learning ##############################
