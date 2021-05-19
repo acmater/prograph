@@ -164,8 +164,6 @@ class Prograph():
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
         self.len = len(self)
 
-        self.d_data = self.gen_d_data()
-
         if self.gen_graph:
             self.update_graph(self.build_graph(),"neighbours")
 
@@ -192,6 +190,7 @@ class Prograph():
         return None
 
     def __str__(self):
+        distances = hamming(self.tokenized,self.tokenized[self.query(self.seed.seq)].reshape(1,-1))
         # TODO Change print formatting for seed sequence so it doesn't look bad
         return """
         Protein Landscape class
@@ -201,8 +200,8 @@ class Prograph():
             Seed Sequence       : {3}
                 Modified positions are shown in green
         """.format(len(self),
-                   self.max_distance,
-                   len(self.d_data),
+                   np.max(distances),
+                   len(np.unique(distances)),
                    self.coloured_seed_string())
 
     def __repr__(self):
@@ -274,7 +273,6 @@ class Prograph():
         else:
             return idx
 
-
     def gen_mutation_arrays(self):
         """
         Generates mutation arrays
@@ -328,20 +326,18 @@ class Prograph():
         assert Bool == "or" or Bool == "and", "Not a valid boolean value."
 
         if reference_seq is None:
-            reference_seq   = self.seed.seq
-            d_data          = self.d_data
-        else:
-            d_data          = self.gen_d_data(self.query(reference_seq))
+            reference_seq = self.seed.seq
+        d_data          = hamming(self.tokenized,self.tokenized[self.query(reference_seq)].reshape(1,-1))
 
         if distances is not None:
             if type(distances) == int:
                 distances = [distances]
             assert type(distances) == list, "Distances must be provided as integer or list"
             for d in distances:
-                assert d in d_data.keys(), f"{d} is not a valid distance"
+                assert d in np.unique(d_data), f"{d} is not a valid distance"
             # Uses reduce from functools package and the union1d operation
             # to recursively combine the indexing arrays.
-            idxs.append(reduce(np.union1d, [d_data[d] for d in distances]))
+            idxs.append(reduce(np.union1d, [np.where(d_data == d)[1] for d in distances]))
 
         if positions is not None:
             # This code uses bitwise operations to maximize speed.
@@ -377,42 +373,6 @@ class Prograph():
             return idxs, np.setdiff1d(np.arange(self.len), idxs)
         else:
             return idxs
-
-
-    def hamming_array(self,seq=None,idxs=None):
-        """
-        Function to calculate the hamming distances of every array using vectorized
-        operations
-
-        Function operates by building an array of the (Nxlen(seed sequence)) with
-        copies of the tokenized seed sequence.
-
-        This array is then compared elementwise with the tokenized data, setting
-        all places where they don't match to False. This array is then inverted,
-        and summed, producing an integer representing the difference for each string.
-
-        Parameters:
-        -----------
-        seq : str, int, tuple
-            Any valid sequence representation (see query for valid formats)
-
-        idxs : np.array[int]
-            A numpy integer index array
-        """
-        if seq is None:
-            tokenized_seq = self.tokenized[0]
-        else:
-            tokenized_seq = self.tokenized[self.query(seq)]
-
-        if idxs is not None:
-            data = self.tokenized[idxs]
-        else:
-            data = self.tokenized
-
-        hammings = np.sum(data != tokenized_seq,axis=1)
-
-        return hammings
-
 
     def generate_mutations(self,seq):
         """
@@ -453,55 +413,6 @@ class Prograph():
         except:
             raise KeyError("Not a valid label.")
         return np.array(list((molecule[label] for molecule in self.graph.values())))
-
-    def get_distance(self,dist,d_data=None):
-        """ Returns all the index of all arrays at a fixed distance from the seed string
-
-        Parameters
-        ----------
-        dist : int
-            The distance that you want extracted
-
-        d_data : dict, default=None
-            A custom d_data dictionary can be provided. If none is provided, self.d_data
-            is used.
-        """
-        if d_data is None:
-            d_data = self.d_data
-
-        return d_data.get(dist,"Not a valid distance for this dataset")
-
-    def gen_d_data(self,seq=None) -> dict:
-        """
-        Generates a dictionary of possible distances from a sequence and then
-        populates it with boolean indexing arrays for each distance
-
-        IMPORTANT Boolean indexing arrays are used here instead of arrays of integer
-        indexes because it is simpler to manipulate groups of them and bitwise
-        operations become available.
-
-        Parameters
-        ----------
-        seq : str, int, tuple
-            A protein sequence provided in any one of the formats that query can parse.
-        """
-        if seq is None:
-            seq = self.seed.seq
-
-        else:
-            seq = self.graph[self.query(seq)]["seq"]
-
-        subsets = {x : [] for x in range(len(seq)+1)}
-
-        self.hammings = self.hamming_array(seq=seq)
-
-        for distance in range(len(seq)+1):
-            subsets[distance] = np.where(np.equal(distance,self.hammings))[0]
-            # Stores an indexing array that isolates only sequences with that Hamming distance
-
-        d_data = {k : v for k,v in subsets.items() if v.any()}
-        self.max_distance = max(d_data.keys())
-        return d_data
 
     def get_mutated_positions(self,positions):
         """
@@ -670,6 +581,22 @@ class Prograph():
 
         Parameters
         ----------
+        idxs : np.array, default=None
+            Integers of the graph to consider as a subgraph of the entire dataset.
+
+        batch_size : int, default=8
+            The size of the batches that will be used to compute pairwise distances on the GPU.
+            The batch chunks will have size (batch_size x len(self)), and as such batch_size should
+            not be too large as otherwise it will not fit into memory.
+
+        eps : numeric, default = 1
+            The epsilon value that defines the local neighbourhood around the value of interest.
+
+        distance : function, default=hamming
+            The vectorized distance function to use.
+
+        comp : <function _operator>, default=operator.eq
+            The operator that will be used to compare the epsilon value and the batch of distances.
         """
         gpu_tokenized = torch.as_tensor(self.tokenized.astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
         results = []

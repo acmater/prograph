@@ -23,4 +23,7 @@ def minkowski(X, Y, p=2):
     -------
         torch.array, shape=(NxM)
     """
-    return torch.pow(torch.sum(torch.pow(X - Y[:,None,:],exponent=p),axis=2),exponent=1/p)
+    if isinstance(X,torch.Tensor):
+        return torch.pow(torch.sum(torch.pow(X - Y[:,None,:],exponent=p),axis=2),exponent=1/p)
+    else: 
+        return np.pow(np.sum(np.pow(X - Y[:,None,:],exponent=p),axis=2),exponent=1/p)
