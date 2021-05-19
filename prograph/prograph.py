@@ -201,7 +201,7 @@ class Prograph():
             Seed Sequence       : {3}
                 Modified positions are shown in green
         """.format(len(self),
-                   np.max(distances),
+                   torch.max(distances),
                    len(np.unique(distances)),
                    self.coloured_seed_string())
 
@@ -565,8 +565,7 @@ class Prograph():
         """
         return np.where(comp(hamming(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
 
-    def nn(self,seq,distance=hamming):
-        # TODO - UPDATE THIS METHOD SO THAT IT CAN TAKE BATCHES
+    def nearest_neighbour(self,seq,distance=hamming,batch_size=8):
         """
         Calculates the nearest neighbour a sequence to the dataset in accordance with a given distance metric.
 
@@ -582,7 +581,11 @@ class Prograph():
         -------
         (nearest Protein, distance)
         """
-        distances = hamming(self.tokenized,self.tokenize(seq).reshape(1,-1))
+        results = []
+        for batch in tqdm.tqdm(list(self.get_every_n(self.tokenize(seq),n=batch_size))):
+            results.append([x.cpu().numpy() for x in torch.where(comp(hamming(gpu_tokenized,batch),eps))])
+
+        distances = distance(self.tokenized,self.tokenize(seq)).numpy()
         idx = np.argmin(distances,axis=1)
         return self[idx], np.min(distances)
 
@@ -637,9 +640,10 @@ class Prograph():
         if idxs is None:
             idxs = torch.arange(len(self))
         gpu_tokenized = torch.as_tensor(self.tokenized[idxs,:].astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
+
         results = []
         for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-            results.append([x.cpu().numpy() for x in torch.where(comp(hamming(gpu_tokenized,batch),eps))])
+            results.append([x.cpu().numpy() for x in torch.where(comp(distance(gpu_tokenized,batch),eps))])
 
         final = []
         for idx, result in enumerate(results):
