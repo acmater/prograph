@@ -159,7 +159,7 @@ class Prograph():
         # Stratifies data into different hamming distances
 
         self.mutation_arrays  = self.gen_mutation_arrays()
-
+        self.mode = "graph"
 
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
         self.len = len(self)
@@ -248,21 +248,21 @@ class Prograph():
             if isinstance(sequence[0], np.integer) or isinstance(sequence[0], int):
                 idx = sequence
             elif isinstance(sequence[0], str):
-                idx = [self.seq_idxs.get(seq, "This sequence is not in the dataset") for seq in sequence]
+                idx = [self.seq_idxs.get(seq, "This sequence is not in the dataset.") for seq in sequence]
             else:
-                print("Wrong data format in numpy array or list iterable")
+                print("Wrong data format in numpy array or list iterable.")
 
         elif isinstance(sequence, str):
-            idx = self.seq_idxs.get(sequence, "This sequence is not in the dataset")
+            idx = self.seq_idxs.get(sequence, "This sequence is not in the dataset.")
 
         elif isinstance(sequence, tuple):
-            assert len(sequence) == self.seq_len, "Tuple not valid length for dataset"
+            assert len(sequence) == self.seq_len, "Tuple not valid length for dataset."
             check = np.where(np.all(sequence == self.tokenized,axis=1))[0]
-            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset"
+            assert len(check) > 0, "Not a valid tuple representation of a protein in this dataset."
             idx = int(check)
 
         else:
-            raise ValueError("Input format not understood")
+            raise ValueError("Input format not understood.")
 
         if information:
             assert self.graph is not None, "To provide additional information, the graph must be computed"
@@ -621,7 +621,7 @@ class Prograph():
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,seq,eps=1,comp=operator.eq):
+    def calc_neighbours(self,seq,eps=1,distance=hamming,comp=operator.eq):
         """
         Calcualtes the neighbours for a given sequence in the presence of a cutoff value.
 
@@ -636,11 +636,14 @@ class Prograph():
         comp : <function _operator>, default=operator.eq
             An operator function that will be used to compare the epsilon value to the comparison vector.
         """
-        return np.where(comp(np.sum(self.tokenized != self.tokenized[self.query(seq)],axis=1),eps))[0]
+        return np.where(comp(hamming(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
 
 
     @staticmethod
     def get_every_n(a, n=2):
+        """
+        Splits an array (numpy or pytorch) into chunks of size n and returns a generator.
+        """
         for i in range(a.shape[0] // n):
             yield a[n*i:n*(i+1)]
 
@@ -656,11 +659,22 @@ class Prograph():
             results[idx] = neighbours[np.where(idxs == idx)]
         return results
 
-    def build_graph(self,idxs=None,batch_size=8):
+    def build_graph(self,
+                    idxs=None,
+                    batch_size=8,
+                    eps=1,
+                    distance=hamming,
+                    comp=operator.eq):
+        """
+        Function to build the protein graph using GPU accelerated pairwise distance calculations.
+
+        Parameters
+        ----------
+        """
         gpu_tokenized = torch.as_tensor(self.tokenized.astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
         results = []
         for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-            results.append([x.cpu().numpy() for x in torch.where(hamming(gpu_tokenized,batch) == 1)])
+            results.append([x.cpu().numpy() for x in torch.where(comp(hamming(gpu_tokenized,batch),eps))])
 
         final = []
         for idx, result in enumerate(results):
@@ -922,3 +936,15 @@ class Prograph():
         if save_model:
             self.learners[f"{model}"] = model
         return train_score, test_score
+
+    def __call__(self,mode="graph"):
+        self.mode = mode
+        return self
+
+    def __iter__(self):
+        # In order for this to work, sklearn_data and pytorch_dataloaders have to be their own classes with their own __iter__
+        # method
+        modes = {"graph" : self.graph,
+                 "sklearn" : self.sklearn_data,
+                 "pytorch" : self.pytorch_dataloaders}
+        return iter(modes.get(self.mode, "Not a valid mode."))

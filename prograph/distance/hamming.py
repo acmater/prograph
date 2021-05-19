@@ -2,6 +2,7 @@
 Hamming distance calculator
 """
 import torch
+import numpy as np
 
 def hamming(X, Y):
     """
@@ -23,4 +24,7 @@ def hamming(X, Y):
     -------
         torch.array, shape=(NxM)
     """
-    return torch.sum(X != Y[:,None,:],axis=2)
+    if isinstance(X,torch.Tensor):
+        return torch.sum(X != Y[:,None,:],axis=2)
+    else:
+        return np.sum(X != Y[:,None,:],axis=2)
