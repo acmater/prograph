@@ -1,39 +1,54 @@
-# Protein Landscapes
+# Prograph
+GPU accelerated construction and manipulation of protein graphs.
 
-Package that interacts with protein datasets and provides a large
-range of functionalities to integrate it with machine learning workflows.
+The codebase revolves around the prograph object which functions as a polymorphic graph object, enabling it to integrate fluidly
+with a wide variety of machine learning codebases.
 
-## Features
+## Basic Usage
+The prograph object can be instantiated simply by calling it with a csv file and identifying which columns correspond to
+the sequences and any associated labels of interest (i.e fitness).
 
-1. Complex indexing operations that allow the user to isolate mutational regimes, select a portion of mutated positions or any combination.
-2. Sample a given dataset using a variety of regimes commonly seen in protein engineering including deep sequence, shotgun, random walk, and evolved trajectory.
-3. The software will use multiprocessing to calculate the graph of the protein dataset, which is then leveraged by a wide
-variety of other methods to accelerate computation.
-4. The capacity to return data (indexed or not) in formats that are pre-prepared for a variety of machine learning tasks including Scikit-learn, Pytorch, and (To do) Tensorflow
-5. Direct integration with sci-kit learn by instantiating models internally.
+```python
+import prograph as pg
+pgraph = pg.Prograph(csv_path="data/synthetic_data.csv")
+```
 
-## How it works
+Following this, the object can make different forms of data available simple by calling it with different arguments. If a protein label
+is passed, such as "seq" or "fitness" then it will return a numpy array of these values for the graph. Alternatively, different ML frameworks can be provided, in which case the object will return its internal data in a manner amenable to that architecture.
 
-The code relies on the interaction of two abstract objects: molecular.py and space.py. These abstract classes provide the user with an API to customize the behaviour of the interactions, resulting in different graphs that can be indexed and traversed in a variety of ways.
+```python
+sequences = pgraph("seq")
+fitnesses = pgraph("fitness")
 
-The code has two fundamental subcomponents:
-1.   The ability to slice the data in a wide variety of ways.
-2.   The ability to return the data to you in the form of useful objects.
+# Scikit-learn
+X_train, Y_train, X_val, Y_val, X_test, Y_test = pgraph("sklearn")
 
-The package strives to achieve high speeds wherever possible by leveraging numpy's abilities.
+# PyTorch
+train_dataloader, val_dataloader, test_dataloader = pgraph("pytorch")
+```
+
+## Graph Features
+
+The strength of prograph lies in its internal graph structure which is calculated using GPU accelerated pairwise distances. This structure enables efficient indexing operations to be performed, allowing for sequences a certain distance from a particular (wild type or seed) sequence to be returned or all sequences that are mutated at a particular position. Additionally it can return the distance from any sequence to the underlying dataset.
+
+All of these operations can be arbitrarily composed with the function calls provided above.
+
+```python
+train_dl, val_dl, test_dl = pgraph("pytorch",positions=[1,2,4])
+# Will isolate the data in which positions 1, 2, and 4 were modified and return dataloaders associated with it.
+X_train, Y_train, _, _, X_test, Y_test = pgraph("sklearn",distance=3,positions=[2,9,11],split=[0.8,0.2])
+# Returns only train and test for the dataset with all sequences 3 mutations from wild type only mutated at positions 2, 9, and 11.
+```
+## Under the hood
+The codebase was designed to be highly extensible, with some distance functions provided along with a cleaners to enable the generation of new distance functions with ease. The codebase is also integratable with networkx and scipy, enabling graph analytics to be readily performed.
 
 ### Todo
+Major
+- Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
+- Add capacity to export graph to sparse matric object.
 
-1. Completely restructuring code to provide abstract base classes that can be readily modified for different examples.
-   1. Currently producing an abstract landscape class that has the minimal level of functionality to generate a graph from a series of molecular representations that are provided.
-   2. Biggest challenge at this point is rebuilding the build_graph function
-   3. Also need to add generalized indexing functions that allow people to meaningfully extract data for different molecular types.
-   4. Need to completely rebuild indexing for abstract base class
-   5. Need to decide if I want machine learning functionality to be built into base class
-2. Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)
-4. Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
-5. Add feature to write out its own graphml object
-6. So when I index it. It makes most sense to return another protein_landscape class, instead of just a dictionary. Then all of then custom functinoality comes with it. Two ways to do this - either use a view of the original graph dictory, or literally instantiate a new class.
-7. Need to add feature that allows you to specify indices for train, validation, and test for sklearn and pytorch
-
-The system needs to be rebuilt to maximize generalizability, making it work with a wide variety of different systems.
+Minor
+- Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)
+- Add feature to write out its own graphml object
+- Add cosine similarity to distance metrics.
+- Add tests for pytorch dataloaders and sklearn data gatherers to ensure that they behave correctly when passed weird arguments.

@@ -171,25 +171,6 @@ class Prograph():
         self.learners = {}
         print(self)
 
-    def update_graph(self, data, label):
-        """
-        Function that updates the internal graph structure. The data array must have the same
-        order as protein sequences in the original graph.
-
-        Parameters
-        ----------
-        data : iterable
-            An iterable that contains the labels that will be used to update the graph.
-            The iterable must support positional indexing as its values will be accessed
-            as data[idx], where index is an integer.
-
-        label : str
-            A string that will be used as the key for this property in each Protein object
-        """
-        for idx, protein in self.graph.items():
-            setattr(protein, label, data[idx])
-        return None
-
     def __str__(self):
         distances = hamming(self.tokenized,self.tokenized[self.query(self.seed.seq)].reshape(1,-1))
         # TODO Change print formatting for seed sequence so it doesn't look bad
@@ -223,6 +204,9 @@ class Prograph():
             return {x : self.graph[x] for x in self.query(idx)}
         else:
             return self.graph[self.query(idx)]
+
+    def __call__(self,label,**kwargs):
+        return self.label_iter(label,**kwargs)
 
     def query(self,sequence,information=False):
         """
@@ -566,6 +550,7 @@ class Prograph():
         return np.where(comp(hamming(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
 
     def nearest_neighbour(self,seq,distance=hamming,batch_size=8):
+        # Todo correctly implement batching code - maybe make it into its own function.
         """
         Calculates the nearest neighbour a sequence to the dataset in accordance with a given distance metric.
 
@@ -656,6 +641,25 @@ class Prograph():
 
         return completed
 
+
+    def update_graph(self, data, label):
+        """
+        Function that updates the internal graph structure. The data array must have the same
+        order as protein sequences in the original graph.
+
+        Parameters
+        ----------
+        data : iterable
+            An iterable that contains the labels that will be used to update the graph.
+            The iterable must support positional indexing as its values will be accessed
+            as data[idx], where index is an integer.
+
+        label : str
+            A string that will be used as the key for this property in each Protein object
+        """
+        for idx, protein in self.graph.items():
+            setattr(protein, label, data[idx])
+        return None
 
     def graph_to_networkx(self,labels=None,update_self=False,iterable="seq"):
         """
@@ -917,6 +921,3 @@ class Prograph():
         if save_model:
             self.learners[f"{model}"] = model
         return train_score, test_score
-
-    def __call__(self,label,**kwargs):
-        return self.label_iter(label,**kwargs)
