@@ -139,8 +139,6 @@ class Prograph():
         self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
         self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
 
-        self.df_graph
-
         for axis in columns:
             self.update_graph(prot_data[axis],axis)
         # This is a reverse of the graph dictionary to support querying by sequence instead of index
@@ -825,8 +823,8 @@ class Prograph():
                             tokenize=True,
                             split=[0.8,0,0.2],
                             idxs=None,
-                             token_form="tokenized",
-                             labels=["Fitness"],
+                            token_form="tokenized",
+                            labels=["Fitness"],
                             distance=False,
                             positions=None,
                             params={"batch_size"  : 500,
@@ -867,20 +865,20 @@ class Prograph():
             to enable better gradient movement
         """
         if idxs is not None:
-            tokenized,labels = self(token_form)[idx], np.vstack([self(label)[idx] for label in labels]).T
+            tokenized,labels = self(token_form)[idxs], np.vstack([self(label)[idxs] for label in labels]).T
         else:
             tokenized,labels = self(token_form), np.vstack([self(label) for label in labels]).T
 
         if unsupervised:
-            labels = {torch.Tensor(tokenize.astype('int8')).long() : real_label for tokenize in tokenized}
+            data_labels = {torch.Tensor(tokenize.astype('int8')).long() : real_label for tokenize in tokenized}
         else:
-            labels = {torch.Tensor(tokenize.astype('int8')).long() : label for tokenize,fit in zip(tokenized,labels)}
+            data_labels = {torch.Tensor(tokenize.astype('int8')).long() : label for tokenize,label in zip(tokenized,labels)}
 
-        keys   = list(labels.keys())
+        keys   = list(data_labels.keys())
 
         split_points = [int(len(tokenized)*split[0]), int(len(tokenized)*sum(split[:2]))]
 
-        return self.gen_dataloaders(labels=labels, keys=keys, params=params, split_points=split_points)
+        return self.gen_dataloaders(labels=data_labels, keys=keys, params=params, split_points=split_points)
 
     ############################################################################
     ############################ Machine Learning ##############################
