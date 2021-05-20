@@ -35,6 +35,9 @@ class Prograph():
     columns : ["Fitness"]
         The columns to extract from the provided csv file.
 
+    index_col : str
+        The index column of the csv datafile.
+
     amino_acids : str, default='ACDEFGHIKLMNPQRSTVWY'
         String containing all allowable amino acids for tokenization functions
 
@@ -80,43 +83,41 @@ class Prograph():
                       seed_seq=None,
                       seqs_col="Sequence",
                       columns=["Fitness"],
+                      index_col=0,
                       amino_acids='ACDEFGHIKLMNPQRSTVWY'):
-        try:
-            #print(f"Trying to load {saved_file}")
-            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=0)
-        except:
-            raise FileNotFoundError("File could not be opened")
-
         if not csv_path:
             print("Initializing empty protein graph")
             return
 
-        self.csv_path = csv_path
-        self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=0)
+        try:
+            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=index_col)
+        except:
+            raise FileNotFoundError("File could not be opened")
 
-        self.amino_acids     = amino_acids
+        self.csv_path        = csv_path
+        self.seed_seq        = seed_seq
+        self.seqs_col        = seqs_col
         self.columns         = columns
-        self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
-
-        # This is a reverse of the graph dictionary to support querying by sequence instead of index
-        self.seq_idxs        = {seq : idx for idx, seq in enumerate(self.graph[seqs_col])}
+        self.index_col       = index_col
+        self.amino_acids     = amino_acids
 
         if seed_seq:
             self.seed        = Protein(seed_seq)
         else:
             self.seed        = Protein(**self.graph.loc[0])
-
         self.seq_len = len(self.seed)
         self.len = len(self)
 
+        self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
         self.tokenized = self.tokenize(self.graph[seqs_col])
+
+        # This is a reverse of the graph dictionary to support querying by sequence instead of index
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized)}
+        self.seq_idxs        = {seq : idx for idx, seq in enumerate(self.graph[seqs_col])}
 
         self.mutated_positions = self.calc_mutated_positions()
         self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.Sequence)
         self.mutation_arrays  = self.gen_mutation_arrays()
-
-        self.len = len(self)
 
         self.graph["Tokenized"] = [x for x in self.tokenized]
         self.graph["Neighbours"] = [x for x in self.build_graph()]
@@ -158,8 +159,26 @@ class Prograph():
         #else:
         return self.graph.iloc[self.query(idx)]
 
-    def __call__(self,label,**kwargs):
+    def __call__(self,label=None,**kwargs):
         return self.label_iter(label,**kwargs)
+
+    def label_iter(self, label, **kwargs):
+        """
+        Helper function that generates an iterable from the protein graph.
+
+        Parameters
+        ----------
+        label : str
+            A string identifier for the label that will have an iterable generated for it.
+        """
+        if label == "pytorch":
+            return self.pytorch_dataloaders(**kwargs)
+        elif label == "sklearn":
+            return self.sklearn_data(**kwargs)
+        elif label == None:
+            return self.graph
+        else:
+            return self.graph[label]
 
     def query(self,sequence):
         """
@@ -306,24 +325,6 @@ class Prograph():
         """ A simple wrapper function that will return the dictionary containing neighbours for a particular sequence """
         return self[self.graph[self.query(seq)]["Neighbours"]]
 
-    def label_iter(self, label=None, **kwargs):
-        """
-        Helper function that generates an iterable from the protein graph.
-
-        Parameters
-        ----------
-        label : str
-            A string identifier for the label that will have an iterable generated for it.
-        """
-        if label == "pytorch":
-            return self.pytorch_dataloaders(**kwargs)
-        elif label == "sklearn":
-            return self.sklearn_data(**kwargs)
-        elif label == None:
-            return self.graph
-        else:
-            return self.graph[label]
-
     def get_mutated_positions(self,positions):
         """
         Function that returns the portion of the data only where the provided positions
@@ -377,7 +378,7 @@ class Prograph():
         return hold_array[copies]
 
     @staticmethod
-    def csvDataLoader(csvfile,seqs_col,columns="all",index_col=None,):
+    def csvDataLoader(csvfile,seqs_col,columns="all",index_col=None):
         """Simple helper function to load NK landscape data from CSV files into numpy arrays.
         Supply outputs to sklearn_split to tokenise and split into train/test split.
 

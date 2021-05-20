@@ -40,6 +40,11 @@ X_train, Y_train, _, _, X_test, Y_test = pgraph("sklearn",distance=3,positions=[
 # Returns only train and test for the dataset with all sequences 3 mutations from wild type only mutated at positions 2, 9, and 11.
 ```
 ## Under the hood
+The graph is stored internally as a pandas dataframe. This frame is what is exported (to a csv) when saved and enables a storage efficient
+and flexible internal model that can be reconstructed at will.
+
+The codebase was designed to adhere to the functional paradigm as much as possible, with the class having internally stored data and a wide variety of functions which manipulate this data.
+
 The codebase was designed to be highly extensible, with some distance functions provided along with a cleaners to enable the generation of new distance functions with ease. The distance functions rely on broadcasting to rapidly perform pairwise comparisons, and thus in order to be efficiently vectorized and computed, any new distance functions must conform to this syntax.
 
 The codebase is also integratable with networkx and scipy, enabling graph analytics to be readily performed.
