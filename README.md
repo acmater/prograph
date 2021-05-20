@@ -48,11 +48,9 @@ The codebase is also integratable with networkx and scipy, enabling graph analyt
 Major
 - Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
 - Add capacity to export graph to sparse matric object.
-- Rewrite internal graph structure so that it is stored as a pandas dataframe so that it is more space efficient.
 
 Minor
 - Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)
 - Add feature to write out its own graphml object
 - Add cosine similarity to distance metrics.
 - Add tests for pytorch dataloaders and sklearn data gatherers to ensure that they behave correctly when passed weird arguments.
-- When saving the graph, don't save the tokenized forms, as they are cheap to compute and take a lot of storage. 

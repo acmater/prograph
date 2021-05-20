@@ -13,7 +13,7 @@ import sklearn.utils as skutils
 import multiprocessing as mp
 from colorama import Fore, Style
 from functools import partial, reduce
-from .utils import Dataset, load, save
+from .utils import Dataset, save
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
@@ -94,47 +94,41 @@ class Prograph():
     max_distance : int
         The maximum distance from the seed sequence within the dataset.
 
-    graph : {idx  : "tokenized"  : tuple(int)     - a Tuple representation of the tokenized protein sequence
+    graph : {idx  : "Tokenized"  : tuple(int)     - a Tuple representation of the tokenized protein sequence
                     "string"     : str            - string representation of protein sequence
-                    "fitness"    : float          - The fitness value associated with this protein
-                    "neighbours" : np.array[idxs] - A numpy array of indexes in the dataset that are neighbours
+                    "Fitness"    : float          - The fitness value associated with this protein
+                    "Neighbours" : np.array[idxs] - A numpy array of indexes in the dataset that are neighbours
 
         Storage of the graph that can be passed to graph visualisation packages
 
     Written by Adam Mater, last revision 18.5.21
     """
-    def __init__(self,data=None,
+    def __init__(self,csv_path=None,
                       seed_seq=None,
-                      gen_graph=False,
-                      csv_path=None,
                       seqs_col="Sequence",
                       columns=["Fitness"],
-                      amino_acids='ACDEFGHIKLMNPQRSTVWY',
-                      saved_file=None):
-        if saved_file:
-            try:
-                print(f"Trying to load {saved_file}")
-                self = load(saved_file,pgraph=self)
-                return None
-            except:
-                raise FileNotFoundError("File could not be opened")
+                      amino_acids='ACDEFGHIKLMNPQRSTVWY'):
+        try:
+            #print(f"Trying to load {saved_file}")
+            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=0)
+        except:
+            raise FileNotFoundError("File could not be opened")
 
-        if (not data and not csv_path):
+        if not csv_path:
             print("Initializing empty protein graph")
             return
 
-        if csv_path and data:
-            print(f"""Both a filepath ({csv_path}) and a data array has been provided. The CSV is
-                     given higher priority so the data will be overwritten by this.""")
-            self.csv_path = csv_path
-            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=0)
+        #if csv_path and data:
+        #    print(f"""Both a filepath ({csv_path}) and a data array has been provided. The CSV is
+        #             given higher priority so the data will be overwritten by this.""")
+        #    self.csv_path = csv_path
+        #    self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=0)
 
-        elif csv_path:
-            self.csv_path = csv_path
-            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=0)
+        #elif csv_path:
+        self.csv_path = csv_path
+        self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=0)
 
         self.amino_acids     = amino_acids
-        self.gen_graph       = gen_graph
         self.columns         = columns
         self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
         #self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
@@ -154,24 +148,19 @@ class Prograph():
 
         self.tokenized = self.tokenize(self.graph[seqs_col])
         #self.update_graph([tuple(x) for x in self.tokenized],"tokenized")
-        self.graph["tokenized"] = [x for x in self.tokenized]
+        self.graph["Tokenized"] = [x for x in self.tokenized]
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized)}
 
         self.mutated_positions = self.calc_mutated_positions()
         self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.Sequence)
         # Stratifies data into different hamming distances
 
-        print(self.graph)
-
-
         self.mutation_arrays  = self.gen_mutation_arrays()
 
         # Contains the information to provide all mutants 1 amino acid away for a given sequence
         self.len = len(self)
 
-        if self.gen_graph:
-            #self.update_graph(self.build_graph(),"neighbours")
-            self.graph["neighbours"] = [x for x in self.build_graph()]
+        self.graph["Neighbours"] = [x for x in self.build_graph()]
 
         self.learners = {}
         print(self)
@@ -190,12 +179,15 @@ class Prograph():
 
     def __repr__(self):
         return f"""Protein_Landscape(seed_seq='{self.seed.Sequence}',
-                                  gen_graph='{self.gen_graph}'
-                                  csv_path='{self.csv_path}',
-                                  columns={self.columns},
-                                  amino_acids='{self.amino_acids}')"""
+                                     csv_path='{self.csv_path}',
+                                     columns={self.columns},
+                                     amino_acids='{self.amino_acids}')"""
 
     def __len__(self):
+        """
+        Calculates the length of the self object by calculating the number of entries in the internal
+        self.graph dataframe.
+        """
         return len(self.graph)
 
     def __getitem__(self,idx):
@@ -385,7 +377,7 @@ class Prograph():
 
     def neighbours(self, seq, keys=[["Sequence"]]):
         """ A simple wrapper function that will return the dictionary containing neighbours for a particular sequence """
-        return self[self.graph[self.query(seq)]["neighbours"]]
+        return self[self.graph[self.query(seq)]["Neighbours"]]
 
     def label_iter(self, label, **kwargs):
         """
@@ -452,11 +444,12 @@ class Prograph():
             y_data (fitnesses)
         """
         data         = pd.read_csv(csvfile,index_col=index_col)
-        #sequences    = data[seqs_col].to_numpy()
         if columns == "all":
             columns = list(data.keys()).remove(seqs_col)
-        #protein_data = data[columns]
-        return data
+        columns = [seqs_col] + columns
+        if "Neighbours" in data:
+            columns += ["Neighbours"]
+        return data[columns]
 
     def custom_tokenize(self,seq,tokenizer=None):
         """
@@ -685,7 +678,7 @@ class Prograph():
         g = nx.Graph()
         for idx,prot in enumerate(prots):
             g.add_node(prot, **{labels[x] : label_iters[x][idx] for x in range(len(label_iters))})
-        for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("neighbours"))):
+        for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("Neighbours"))):
             g.add_edges_from([(sequences[idx], sequences[neighbour_idx]) for neighbour_idx in neighbours])
         if update_self:
             self.networkx_graph = g
@@ -728,7 +721,7 @@ class Prograph():
     def sklearn_data(self,
                      data=None,
                      idxs=None,
-                     token_form="tokenized",
+                     token_form="Tokenized",
                      labels=["Fitness"],
                      split=[0.8,0,0.2],
                      scaler=False,
@@ -829,7 +822,7 @@ class Prograph():
                             tokenize=True,
                             split=[0.8,0,0.2],
                             idxs=None,
-                            token_form="tokenized",
+                            token_form="Tokenized",
                             labels=["Fitness"],
                             distance=False,
                             positions=None,
