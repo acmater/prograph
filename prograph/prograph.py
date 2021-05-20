@@ -139,6 +139,8 @@ class Prograph():
         self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
         self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
 
+        self.df_graph
+
         for axis in columns:
             self.update_graph(prot_data[axis],axis)
         # This is a reverse of the graph dictionary to support querying by sequence instead of index
@@ -174,17 +176,14 @@ class Prograph():
     def __str__(self):
         distances = hamming(self.tokenized,self.tokenized[self.query(self.seed.seq)].reshape(1,-1))
         # TODO Change print formatting for seed sequence so it doesn't look bad
-        return """
+        return f"""
             Protein Landscape class
-            Number of Sequences : {0}
-            Max Distance        : {1}
-            Number of Distances : {2}
-            Seed Sequence       : {3}
-                Modified positions are shown in green
-        """.format(len(self),
-                   torch.max(distances),
-                   len(np.unique(distances)),
-                   self.coloured_seed_string())
+            Number of Sequences : {len(self)}
+            Max Distance        : {torch.max(distances)}
+            Longest Sequence    : {np.max([len(x) for x in self("seq")])}
+            Number of Distances : {len(np.unique(distances))}
+            Seed Sequence       : {self.coloured_seed_string()}
+                Modified positions are shown in green"""
 
     def __repr__(self):
         return f"""Protein_Landscape(seed_seq='{self.seed.seq}',
@@ -398,7 +397,7 @@ class Prograph():
         elif label == "sklearn":
             return self.sklearn_data(**kwargs)
         else:
-            return np.array(list((molecule[label] for molecule in self.graph.values())))
+            return np.array(list((protein[label] for protein in self.graph.values())))
 
     def get_mutated_positions(self,positions):
         """
@@ -701,7 +700,7 @@ class Prograph():
         """
         degrees = np.zeros((len(self),),dtype=np.int)
         for i in range(len(self)):
-            degrees[i] = len(land[i].neighbours)
+            degrees[i] = len(self[i].neighbours)
         return degrees
 
     ############################################################################
@@ -725,6 +724,8 @@ class Prograph():
     def sklearn_data(self,
                      data=None,
                      idxs=None,
+                     token_form="tokenized",
+                     labels=["Fitness"],
                      split=[0.8,0,0.2],
                      scaler=False,
                      shuffle=True,
@@ -757,8 +758,6 @@ class Prograph():
         returns : x_train, y_train, x_val, y_val, x_test, y_test
             All Nx1 arrays with train as the first 80% of the shuffled data and test
             as the latter 20% of the shuffled data.
-
-            # TODO Stop autograbbing fitness and tokenized - let user specify the two values
         """
         if isinstance(split,int):
             split = [split,0,1-split]
@@ -767,22 +766,22 @@ class Prograph():
         if data is not None:
             data = data
         elif idxs is not None:
-            tokenized,fitness = self("tokenized")[idx], self("Fitness")[idx]
+            tokenized,labels = self(token_form)[idx], np.vstack([self(label)[idx] for label in labels]).T
         else:
-            tokenized,fitness = self("tokenized"), self("Fitness")
+            tokenized,labels = self(token_form), np.vstack([self(label) for label in labels]).T
 
         if shuffle:
-            tokenized, fitness = skutils.shuffle(tokenized,fitness,random_state=random_state)
+            tokenized, labels = skutils.shuffle(tokenized,labels,random_state=random_state)
 
         if scaler:
-            fitnesses = fitness.reshape(-1,1)
+            fitnesses = labels.reshape(-1,1)
             scaler.fit(fitnesses)
-            fitness = scaler.transform(fitnesses).reshape(-1)
+            labels = scaler.transform(fitnesses).reshape(-1)
 
         split1, split2 = int(len(tokenized)*split[0]), int(len(tokenized)*sum(split[:2]))
 
         x_train, x_val, x_test = tokenized[:split1], tokenized[split1:split2], tokenized[split2:]
-        y_train, y_val, y_test = fitness[:split1],   fitness[split1:split2],  fitness[split2:]
+        y_train, y_val, y_test = labels[:split1],   labels[split1:split2],  labels[split2:]
 
         return x_train.astype("int"), y_train.astype("float"), \
                x_val.astype("int"),   y_val.astype("float"), \
@@ -826,6 +825,8 @@ class Prograph():
                             tokenize=True,
                             split=[0.8,0,0.2],
                             idxs=None,
+                             token_form="tokenized",
+                             labels=["Fitness"],
                             distance=False,
                             positions=None,
                             params={"batch_size"  : 500,
@@ -866,14 +867,14 @@ class Prograph():
             to enable better gradient movement
         """
         if idxs is not None:
-            tokenized,fitness = self("tokenized")[idxs], self("Fitness")[idxs]
+            tokenized,labels = self(token_form)[idx], np.vstack([self(label)[idx] for label in labels]).T
         else:
-            tokenized,fitness = self("tokenized"), self("Fitness")
+            tokenized,labels = self(token_form), np.vstack([self(label) for label in labels]).T
 
         if unsupervised:
             labels = {torch.Tensor(tokenize.astype('int8')).long() : real_label for tokenize in tokenized}
         else:
-            labels = {torch.Tensor(tokenize.astype('int8')).long() : fit for tokenize,fit in zip(tokenized,fitness)}
+            labels = {torch.Tensor(tokenize.astype('int8')).long() : label for tokenize,fit in zip(tokenized,labels)}
 
         keys   = list(labels.keys())
 

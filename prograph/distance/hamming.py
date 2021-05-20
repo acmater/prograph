@@ -3,7 +3,7 @@ Hamming distance calculator
 """
 import torch
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 from .utils import clean_input
 
 def hamming(X, Y):
