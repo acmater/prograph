@@ -79,16 +79,12 @@ class Prograph():
 
     Written by Adam Mater, last revision 20.5.21
     """
-    def __init__(self,csv_path=None,
+    def __init__(self,csv_path,
                       seed_seq=None,
                       seqs_col="Sequence",
                       columns=["Fitness"],
                       index_col=0,
                       amino_acids='ACDEFGHIKLMNPQRSTVWY'):
-        if not csv_path:
-            print("Initializing empty protein graph")
-            return
-
         try:
             self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=index_col)
         except:
