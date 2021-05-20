@@ -125,7 +125,7 @@ class Prograph():
         distances = hamming(self.tokenized,self.tokenized[self.query(self.seed.Sequence)].reshape(1,-1))
         # TODO Change print formatting for seed sequence so it doesn't look bad
         return f"""
-            Protein Landscape class
+            Prograph
             Number of Sequences : {len(self)}
             Max Distance        : {torch.max(distances)}
             Longest Sequence    : {np.max([len(x) for x in self("Sequence")])}
@@ -134,10 +134,18 @@ class Prograph():
                 Modified positions are shown in green"""
 
     def __repr__(self):
-        return f"""Protein_Landscape(seed_seq='{self.seed.Sequence}',
-                                     csv_path='{self.csv_path}',
-                                     columns={self.columns},
-                                     amino_acids='{self.amino_acids}')"""
+        self.csv_path        = csv_path
+        self.seed_seq        = seed_seq
+        self.seqs_col        = seqs_col
+        self.columns         = columns
+        self.index_col       = index_col
+        self.amino_acids
+        return f"""Prograph(csv_path={self.csv_path},
+                            seed_seq='{self.seed.Sequence}',
+                            seqs_col='{self.seqs_col}',
+                            columns={self.columns},
+                            index_col={self.index_col},
+                            amino_acids='{self.amino_acids}')"""
 
     def __len__(self):
         """
