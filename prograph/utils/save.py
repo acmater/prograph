@@ -32,6 +32,7 @@ def save(pgraph,name=None,ext=".pkl",directory=None):
     if not name:
         name = file.rsplit(".",1)[0]
     print(f"Saving Graph to {name + ext}")
+    pgraph.graph[[x for x in pgraph.graph if x != "tokenized"]].to_csv("data/test.csv")
     try:
         file = open(directory+name+ext,"wb")
         file.write(pickle.dumps(pgraph.__dict__))
