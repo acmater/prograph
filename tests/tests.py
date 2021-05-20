@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import torch
 import os
-from prograph.utils import save, load
+from prograph.utils import save
 
 from prograph import Prograph
 
@@ -10,23 +10,23 @@ from prograph import Prograph
 
 class TestGenpgraph(unittest.TestCase):
     def gen_pgraph(self):
-        pgraph = Prograph(csv_path="data/synthetic_data.csv",gen_graph=True)
+        pgraph = Prograph(csv_path="data/synthetic_data.csv")
 
-pgraph = Prograph(csv_path="data/synthetic_data.csv",gen_graph=True)
+pgraph = Prograph(csv_path="data/synthetic_data.csv")
 
 class TestQuery(unittest.TestCase):
     def test_string_idx(self):
-        assert pgraph["AAC"]["seq"] == "AAC", "String indexing has failed"
+        assert pgraph["AAC"]["Sequence"] == "AAC", "String indexing has failed"
     def test_int_idx(self):
-        assert pgraph[26]["seq"] == "ADH", "Integer indexing has failed"
+        assert pgraph("Sequence")[26] == "ADH", "Integer indexing has failed"
     def test_tuple_idx(self):
-        assert pgraph[(1,2,2)]["seq"] == "ACC", "Tuple indexing has failed"
+        assert pgraph[(1,2,2)]["Sequence"] == "ACC", "Tuple indexing has failed"
     def test_len(self):
         assert len(pgraph) == 1000, "__getitem__ method is failing"
     def test_list(self):
-        assert pgraph[[1,2,4]][2]["seq"] == "AAD", "list indexing has failed"
+        assert pgraph[[1,2,4]]["Sequence"][2] == "AAD", "list indexing has failed"
     def test_array(self):
-        assert pgraph[np.array([63,87])][87]["seq"] == "AKI", "numpy array indexing has failed"
+        assert pgraph[np.array([63,87])]["Sequence"][87] == "AKI", "numpy array indexing has failed"
 
 class TestIndexing(unittest.TestCase):
     def test_positions(self):
@@ -49,9 +49,9 @@ class TestDistanceGeneration(unittest.TestCase):
         pgraph.gen_d_data(seq="ACL")
     def test_get_distance_custom_d_data(self):
         out = pgraph[pgraph.get_distance(dist=0,d_data=pgraph.gen_d_data(seq="ACL"))]
-        assert out[19]["seq"] == 'ACL'"""
+        assert out[19]["Sequence"] == 'ACL'"""
     def test_calc_neighnours(self):
-        assert np.all(pgraph.calc_neighbours(seq="ACL") == pgraph["ACL"]["neighbours"]), "Calc neighbours has an error"
+        assert np.all(pgraph.calc_neighbours(seq="ACL") == pgraph["ACL"]["Neighbours"]), "Calc neighbours has an error"
 
 class TestPyTorchDataLoaders(unittest.TestCase):
     def test_pytorch_dataloader_generation(self):
@@ -90,31 +90,31 @@ class TestIndexingOperations(unittest.TestCase):
             pgraph.indexing(distances=[1,2,4])
         assert len(pgraph.indexing(distances=[1,3])) == 756
     def test_distance_reference_indexing(self):
-        assert pgraph[pgraph.indexing(reference_seq="LDC",positions=[1])][901]["seq"] == "LAC", "Reference indexing not working correctly."
+        assert pgraph[pgraph.indexing(reference_seq="LDC",positions=[1])]["Sequence"][901] == "LAC", "Reference indexing not working correctly."
 
 class TestNetworkx(unittest.TestCase):
     def test_networkx_generation(self):
-        pgraph.graph_to_networkx(labels=["Fitness","tokenized"],update_self=True)
+        pgraph.graph_to_networkx(labels=["Fitness","Tokenized"],update_self=True)
         assert "Fitness" in pgraph.networkx_graph.nodes["AAA"].keys(), "Networkx graph generation is not working."
 
 class TestLoadPrograph(unittest.TestCase):
     def test_load_pgraph(self):
-        pgraph = Prograph(saved_file="data/synthetic_data.pkl")
+        pgraph = Prograph(csv_path="data/synthetic_data_pgraph.csv")
         assert pgraph[0]["Fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
     def test_load_wrong_type(self):
         with self.assertRaises(AssertionError) and self.assertRaises(FileNotFoundError):
-            pgraph = Prograph(saved_file=2)
+            pgraph = Prograph(csv_path=2)
     def test_load_empty(self):
-        pgraph = Prograph(saved_file=None)
-        assert pgraph.__dict__ == {}, "The initialized graph is not empty."
+        with self.assertRaises(FileNotFoundError):
+            pgraph = Prograph(csv_path=None)
 
 class TestSavePrograph(unittest.TestCase):
     def test_save_pgraph(self):
-        pgraph = Prograph(saved_file="data/synthetic_data.pkl")
+        pgraph = Prograph(csv_path="data/synthetic_data.csv")
         assert save(pgraph,name="test",directory="./"), "Protein graph could not be saved correctly"
-        new_pgraph = load("test.pkl")
-        assert new_pgraph[0]["seq"] == "AAA", "Graph loaded following saving is not functioning correctly."
-        os.remove("test.pkl")
+        new_pgraph = Prograph(csv_path="test.csv")
+        assert new_pgraph[0]["Sequence"] == "AAA", "Graph loaded following saving is not functioning correctly."
+        os.remove("test.csv")
 
 class TestTokenization(unittest.TestCase):
     def test_basic_tokenization(self):

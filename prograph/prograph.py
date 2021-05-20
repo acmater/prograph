@@ -13,7 +13,7 @@ import sklearn.utils as skutils
 import multiprocessing as mp
 from colorama import Fore, Style
 from functools import partial, reduce
-from .utils import Dataset, load, save
+from .utils import Dataset, save
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
@@ -25,34 +25,21 @@ class Prograph():
 
     Parameters
     ----------
-    data : np.array
-        Numpy Array containg protein data. Expected shape is (Nx2), with the first
-        column being the sequences, and the second being the fitnesses
-
-    seed_seq : str, default=None
-        Enables the user to explicitly provide the seed sequence as a string
-
-    seed_id : int,default=0
-        Id of seed sequences within sequences and fitness
-
     csv_path : str,default=None
         Path to the csv file that should be imported using CSV loader function
 
-    custom_columns : {"x_data"    : str,
-                      "y_data"    : str
-                      "index_col" : int}, default=None
-        First two entries are custom strings to use as column headers when extracting
-        data from CSV. Replaces default values of "Sequence" and "Fitness".
+    seed_seq : str, default=None
+        Enables the user to explicitly provide the seed sequence as a string. Otherwise it
+        will default to the first sequence in the dataset.
 
-        Third value is the integer to use as the index column.
+    columns : ["Fitness"]
+        The columns to extract from the provided csv file.
 
-        They are passed to the function as keyword arguments
+    index_col : str
+        The index column of the csv datafile.
 
     amino_acids : str, default='ACDEFGHIKLMNPQRSTVWY'
         String containing all allowable amino acids for tokenization functions
-
-    saved_file : str, default=None
-        Saved version of this class that will be loaded instead of instantiating a new one
 
     Attributes
     ----------
@@ -65,10 +52,6 @@ class Prograph():
 
      mutated_positions: np.array(int)
         Numpy array that stores the integers of each position that is mutated
-
-    d_data : {distance : index_array}
-        A dictionary where each distance is a key and the values are the indexes of nodes
-        with that distance from the seed sequence
 
     tokens : {tuple(tokenized_sequence) : index}
         A dictionary that stores a tuple format of the tokenized string with the index
@@ -87,125 +70,113 @@ class Prograph():
 
         L is sequence length.
 
-    hammings : np.array(N,)
-        Numpy array of length number of samples, where each value is the hamming
-        distance of the species at that index from the seed sequence.
+    graph : pd.DataFrame
+        Storage efficient form of the graph as a pandas dataframe.
+        The graph must contain three columns - ["Sequence","Tokenized","Neighbours"].
+        When saved, the csv will have the tokenized form removed as this is quite
+        a cheap calculation and requires a large amount of storage, and thus not worth it.
 
-    max_distance : int
-        The maximum distance from the seed sequence within the dataset.
 
-    graph : {idx  : "tokenized"  : tuple(int)     - a Tuple representation of the tokenized protein sequence
-                    "string"     : str            - string representation of protein sequence
-                    "fitness"    : float          - The fitness value associated with this protein
-                    "neighbours" : np.array[idxs] - A numpy array of indexes in the dataset that are neighbours
-
-        Storage of the graph that can be passed to graph visualisation packages
-
-    Written by Adam Mater, last revision 18.5.21
+    Written by Adam Mater, last revision 20.5.21
     """
-    def __init__(self,data=None,
+    def __init__(self,csv_path,
                       seed_seq=None,
-                      gen_graph=False,
-                      csv_path=None,
                       seqs_col="Sequence",
                       columns=["Fitness"],
-                      amino_acids='ACDEFGHIKLMNPQRSTVWY',
-                      saved_file=None):
-        if saved_file:
-            try:
-                print(f"Trying to load {saved_file}")
-                self = load(saved_file,pgraph=self)
-                return None
-            except:
-                raise FileNotFoundError("File could not be opened")
+                      index_col=0,
+                      amino_acids='ACDEFGHIKLMNPQRSTVWY'):
+        try:
+            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=index_col)
+        except:
+            raise FileNotFoundError("File could not be opened")
 
-        if (not data and not csv_path):
-            print("Initializing empty protein graph")
-            return
-
-        if csv_path and data:
-            print(f"""Both a filepath ({csv_path}) and a data array has been provided. The CSV is
-                     given higher priority so the data will be overwritten by this.""")
-            self.csv_path = csv_path
-            sequences, prot_data = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns)
-
-        elif csv_path:
-            self.csv_path = csv_path
-            sequences, prot_data = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns)
-
-        self.amino_acids     = amino_acids
-        self.gen_graph       = gen_graph
+        self.csv_path        = csv_path
+        self.seed_seq        = seed_seq
+        self.seqs_col        = seqs_col
         self.columns         = columns
-        self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
-        self.graph = {idx : Protein(sequence) for idx,sequence in enumerate(sequences)}
-
-        for axis in columns:
-            self.update_graph(prot_data[axis],axis)
-        # This is a reverse of the graph dictionary to support querying by sequence instead of index
-        self.seq_idxs        = {seq : idx for idx, seq in enumerate(sequences)}
+        self.index_col       = index_col
+        self.amino_acids     = amino_acids
 
         if seed_seq:
             self.seed        = Protein(seed_seq)
         else:
-            self.seed        = self.graph[0]
+            self.seed        = Protein(**self.graph.loc[0])
         self.seq_len = len(self.seed)
         self.len = len(self)
 
-        self.tokenized = self.tokenize(sequences)
-        self.update_graph([tuple(x) for x in self.tokenized],"tokenized")
+        self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
+        self.tokenized = self.tokenize(self.graph[seqs_col])
+
+        # This is a reverse of the graph dictionary to support querying by sequence instead of index
         self.token_dict = {tuple(seq) : idx for idx,seq in enumerate(self.tokenized)}
+        self.seq_idxs        = {seq : idx for idx, seq in enumerate(self.graph[seqs_col])}
 
         self.mutated_positions = self.calc_mutated_positions()
-        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.seq)
-        # Stratifies data into different hamming distances
-
+        self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.Sequence)
         self.mutation_arrays  = self.gen_mutation_arrays()
-        self.mode = "graph"
 
-        # Contains the information to provide all mutants 1 amino acid away for a given sequence
-        self.len = len(self)
-
-        if self.gen_graph:
-            self.update_graph(self.build_graph(),"neighbours")
+        self.graph["Tokenized"] = [x for x in self.tokenized]
+        self.graph["Neighbours"] = [x for x in self.build_graph()]
 
         self.learners = {}
         print(self)
 
     def __str__(self):
-        distances = hamming(self.tokenized,self.tokenized[self.query(self.seed.seq)].reshape(1,-1))
+        distances = hamming(self.tokenized,self.tokenized[self.query(self.seed.Sequence)].reshape(1,-1))
         # TODO Change print formatting for seed sequence so it doesn't look bad
         return f"""
             Protein Landscape class
             Number of Sequences : {len(self)}
             Max Distance        : {torch.max(distances)}
-            Longest Sequence    : {np.max([len(x) for x in self("seq")])}
+            Longest Sequence    : {np.max([len(x) for x in self("Sequence")])}
             Number of Distances : {len(np.unique(distances))}
             Seed Sequence       : {self.coloured_seed_string()}
                 Modified positions are shown in green"""
 
     def __repr__(self):
-        return f"""Protein_Landscape(seed_seq='{self.seed.seq}',
-                                  gen_graph='{self.gen_graph}'
-                                  csv_path='{self.csv_path}',
-                                  columns={self.columns},
-                                  amino_acids='{self.amino_acids}')"""
+        return f"""Protein_Landscape(seed_seq='{self.seed.Sequence}',
+                                     csv_path='{self.csv_path}',
+                                     columns={self.columns},
+                                     amino_acids='{self.amino_acids}')"""
 
     def __len__(self):
+        """
+        Calculates the length of the self object by calculating the number of entries in the internal
+        self.graph dataframe.
+        """
         return len(self.graph)
 
     def __getitem__(self,idx):
         """
         Customised __getitem__ that supports both integer and array indexing.
         """
-        if isinstance(idx, np.ndarray) or isinstance(idx, list):
-            return {x : self.graph[x] for x in self.query(idx)}
-        else:
-            return self.graph[self.query(idx)]
+        #if isinstance(idx, np.ndarray) or isinstance(idx, list):
+            #return {x : self.graph.iloc[x] for x in self.query(idx)}
+        #else:
+        return self.graph.iloc[self.query(idx)]
 
-    def __call__(self,label,**kwargs):
+    def __call__(self,label=None,**kwargs):
         return self.label_iter(label,**kwargs)
 
-    def query(self,sequence,information=False):
+    def label_iter(self, label, **kwargs):
+        """
+        Helper function that generates an iterable from the protein graph.
+
+        Parameters
+        ----------
+        label : str
+            A string identifier for the label that will have an iterable generated for it.
+        """
+        if label == "pytorch":
+            return self.pytorch_dataloaders(**kwargs)
+        elif label == "sklearn":
+            return self.sklearn_data(**kwargs)
+        elif label == None:
+            return self.graph
+        else:
+            return self.graph[label]
+
+    def query(self,sequence):
         """
         Helper function that interprets a query sequence and accepts multiple formats.
         This object works by moving indexes of sequences around due to the large increase
@@ -216,10 +187,6 @@ class Prograph():
         ----------
         sequence : str, tuple, int
             The sequence to query against the dataset. Multiple valid input formats
-
-        information : Bool, default=True
-            Whether or not to return the information rich form of the protein, i.e
-            its multiple representations, label, and neighbours (leverages the graph object)
         """
         if isinstance(sequence, int) or isinstance(sequence, np.integer):
             assert sequence <= self.len, "Index exceeds bounds of dataset"
@@ -245,34 +212,27 @@ class Prograph():
         else:
             raise ValueError("Input format not understood.")
 
-        if information:
-            assert self.graph is not None, "To provide additional information, the graph must be computed"
-            if isinstance(idx, np.ndarray) or isinstance(idx, list):
-                return {ix : self.graph[ix] for ix in idx}
-            else:
-                return self.graph[idx]
-
-        else:
-            return idx
-
-    def gen_mutation_arrays(self):
-        """
-        Generates mutation arrays
-
-        TODO finish writing docstrings
-        """
-        xs = np.arange(self.seq_len*len(self.amino_acids))
-        ys = np.array([[y for x in range(len(self.amino_acids))] for y in range(self.seq_len)]).flatten()
-        modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(self.seq_len)]).flatten()
-        return (xs, ys, modifiers)
+        return idx
 
     def positions(self,positions):
+        """
+        Helper function that passes a set of positions to indexing.
+        """
         return self.indexing(positions=positions)
 
     def distances(self,distances):
+        """
+        Helper function that passes a set of distances to indexing.
+        """
         return self.indexing(distances=distances)
 
-    def indexing(self,reference_seq=None,distances=None,positions=None,percentage=None,Bool="or",complement=False):
+    def indexing(self,
+                 reference_seq=None,
+                 distances=None,
+                 positions=None,
+                 percentage=None,
+                 Bool="or",
+                 complement=False):
         """
         Function that handles more complex indexing operations, for example wanting
         to combine multiple distance indexes or asking for a random set of indices of a given
@@ -308,7 +268,8 @@ class Prograph():
         assert Bool == "or" or Bool == "and", "Not a valid boolean value."
 
         if reference_seq is None:
-            reference_seq = self.seed.seq
+            reference_seq = self.seed.Sequence
+
         d_data          = hamming(self.tokenized,self.tokenized[self.query(reference_seq)].reshape(1,-1))
 
         if distances is not None:
@@ -327,7 +288,7 @@ class Prograph():
             # It then goes through each position that shouldn't be changed, and uses three logic gates
             # to switch ones where they're both on to off, returning the indexes of strings where ONLY
             # the desired positions are changed.
-            not_positions = [x for x in range(len(self[reference_seq])) if x not in positions]
+            not_positions = [x for x in range(len(self[reference_seq]["Sequence"])) if x not in positions]
             sequence_mutation_locations = self.boolean_mutant_array(reference_seq)
             if Bool == "or":
                 working = reduce(np.logical_or,[sequence_mutation_locations[:,pos] for pos in positions])
@@ -356,46 +317,9 @@ class Prograph():
         else:
             return idxs
 
-    def generate_mutations(self,seq):
-        """
-        Takes a sequence and generates all possible mutants 1 Hamming distance away
-        using array substitution
-
-        Parameters:
-        -----------
-        seq : np.array[int]
-            Tokenized sequence array
-        """
-        seq = self.tokenized[self.query(seq)]
-        seed = self.seed
-        hold_array = np.zeros(((self.seq_len*len(self.amino_acids)),self.seq_len))
-        for i,char in enumerate(seq):
-            hold_array[:,i] = char
-
-        xs, ys, mutations = self.mutation_arrays
-        hold_array[(xs,ys)] = mutations
-        copies = np.invert(np.all(hold_array == seq,axis=1))
-        return hold_array[copies]
-
-    def neighbours(self, seq, keys=[["seq"]]):
+    def neighbours(self, seq, keys=[["Sequence"]]):
         """ A simple wrapper function that will return the dictionary containing neighbours for a particular sequence """
-        return self[self.graph[self.query(seq)]["neighbours"]]
-
-    def label_iter(self, label, **kwargs):
-        """
-        Helper function that generates an iterable from the protein graph.
-
-        Parameters
-        ----------
-        label : str
-            A string identifier for the label that will have an iterable generated for it.
-        """
-        if label == "pytorch":
-            return self.pytorch_dataloaders(**kwargs)
-        elif label == "sklearn":
-            return self.sklearn_data(**kwargs)
-        else:
-            return np.array(list((protein[label] for protein in self.graph.values())))
+        return self[self.graph[self.query(seq)]["Neighbours"]]
 
     def get_mutated_positions(self,positions):
         """
@@ -418,8 +342,39 @@ class Prograph():
 
         return mutated_indexes
 
+    def gen_mutation_arrays(self):
+        """
+        Generates mutation arrays. These arrays can be combined to generate all single mutants
+        from a given single sequence.
+        """
+        xs = np.arange(self.seq_len*len(self.amino_acids))
+        ys = np.array([[y for x in range(len(self.amino_acids))] for y in range(self.seq_len)]).flatten()
+        modifiers = np.array([np.arange(len(self.amino_acids)) for x in range(self.seq_len)]).flatten()
+        return (xs, ys, modifiers)
+
+    def generate_mutations(self,seq):
+        """
+        Takes a sequence and generates all possible mutants 1 Hamming distance away
+        using array substitution
+
+        Parameters:
+        -----------
+        seq : np.array[int]
+            Tokenized sequence array
+        """
+        seq = self.tokenized[self.query(seq)]
+        seed = self.seed
+        hold_array = np.zeros(((self.seq_len*len(self.amino_acids)),self.seq_len))
+        for i,char in enumerate(seq):
+            hold_array[:,i] = char
+
+        xs, ys, mutations = self.mutation_arrays
+        hold_array[(xs,ys)] = mutations
+        copies = np.invert(np.all(hold_array == seq,axis=1))
+        return hold_array[copies]
+
     @staticmethod
-    def csvDataLoader(csvfile,seqs_col,columns="all",index_col=None,):
+    def csvDataLoader(csvfile,seqs_col,columns="all",index_col=None):
         """Simple helper function to load NK landscape data from CSV files into numpy arrays.
         Supply outputs to sklearn_split to tokenise and split into train/test split.
 
@@ -446,11 +401,12 @@ class Prograph():
             y_data (fitnesses)
         """
         data         = pd.read_csv(csvfile,index_col=index_col)
-        sequences    = data[seqs_col].to_numpy()
         if columns == "all":
             columns = list(data.keys()).remove(seqs_col)
-        protein_data = data[columns]
-        return sequences, protein_data
+        columns = [seqs_col] + columns
+        if "Neighbours" in data:
+            columns += ["Neighbours"]
+        return data[columns]
 
     def custom_tokenize(self,seq,tokenizer=None):
         """
@@ -503,7 +459,7 @@ class Prograph():
             self.tokenized is called, and the fitness column is removed by [:,:-1]
             Each column is then tested against the first
         """
-        mutated_bools = np.invert(np.all(self.tokenized == self.tokenize(self.seed.seq),axis=0)) # Calculates the indices all of arrays which are modified.
+        mutated_bools = np.invert(np.all(self.tokenized == self.tokenize(self.seed.Sequence),axis=0)) # Calculates the indices all of arrays which are modified.
         mutated_idxs  = mutated_bools * np.arange(1,len(self.seed) + 1) # Shifts to the right so that zero can be counted as an idx
         return mutated_idxs[mutated_idxs != 0] - 1 # Shifts it back
 
@@ -514,7 +470,7 @@ class Prograph():
         """
         strs = []
         idxs = self.mutated_positions
-        for i,char in enumerate(self.seed.seq):
+        for i,char in enumerate(self.seed.Sequence):
             if i in idxs:
                 strs.append(f"{Fore.GREEN}{char}{Style.RESET_ALL}")
             else:
@@ -658,7 +614,7 @@ class Prograph():
             setattr(protein, label, data[idx])
         return None
 
-    def graph_to_networkx(self,labels=None,update_self=False,iterable="seq"):
+    def graph_to_networkx(self,labels=None,update_self=False,iterable="Sequence"):
         """
         Produces a networkx graph from the internally stored graph object
 
@@ -679,7 +635,7 @@ class Prograph():
         g = nx.Graph()
         for idx,prot in enumerate(prots):
             g.add_node(prot, **{labels[x] : label_iters[x][idx] for x in range(len(label_iters))})
-        for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("neighbours"))):
+        for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("Neighbours"))):
             g.add_edges_from([(sequences[idx], sequences[neighbour_idx]) for neighbour_idx in neighbours])
         if update_self:
             self.networkx_graph = g
@@ -715,14 +671,14 @@ class Prograph():
             Boolean value that determines if the raw or tokenized data will be returned.
         """
         if tokenized:
-            return np.array([x[["seq","fitness"]] for x in self.graph])
+            return np.array([x[["Sequence","Fitness"]] for x in self.graph])
         else:
             return copy.copy(self.tokenized)
 
     def sklearn_data(self,
                      data=None,
                      idxs=None,
-                     token_form="tokenized",
+                     token_form="Tokenized",
                      labels=["Fitness"],
                      split=[0.8,0,0.2],
                      scaler=False,
@@ -820,10 +776,9 @@ class Prograph():
         return training_generator, test_generator
 
     def pytorch_dataloaders(self,
-                            tokenize=True,
                             split=[0.8,0,0.2],
                             idxs=None,
-                            token_form="tokenized",
+                            token_form="Tokenized",
                             labels=["Fitness"],
                             distance=False,
                             positions=None,
@@ -838,11 +793,8 @@ class Prograph():
 
         Parameters:
         -----------
-        tokenize : Bool, default=True
-            Determines if the dataloaders should return tokenized values or not
-
-        split_point : float, default=0.8, 0 <= split_point <= 1
-            Determines what fraction of data goes into training and test dataloaders
+        split : [float], default=[0.8,0,0.2], 0 <= sum(split) <= 1
+            Determines what fraction of data goes into training, validation, and test dataloaders
 
         idxs : np.array[int], default=None
             Indexes which will be used to create a subset of the data before the other operations are applied.
@@ -893,15 +845,12 @@ class Prograph():
         model : sklearn or skorch model architecture.
 
         model_args : {keyword : argument}
-
             Arguments that will be unpacked when the model is instantiated.
 
         save_model : bool, default=False
-
             The boolean value for whether or not the model will be saved to self.learner
 
         kwargs : {keyword : argument}
-
             Arguments that will be provided to sklearn_data to perform the necessary splits
 
         Example Syntax - landscape.fit(LinearRegressor,{"fit_intercept" : True})

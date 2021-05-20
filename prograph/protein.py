@@ -13,8 +13,8 @@ class Protein():
         The only required argument. Is used to calculate length and to determine if
         two proteins are equivalent.
     """
-    def __init__(self, seq,**kwargs):
-        self.seq = seq
+    def __init__(self, Sequence,**kwargs):
+        self.Sequence = Sequence
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -36,7 +36,7 @@ class Protein():
         return self.__dict__[keys]
 
     def __len__(self):
-        return len(self.seq)
+        return len(self.Sequence)
 
     def __eq__(self,other):
-        return True if self.seq == other.seq else False
+        return True if self.Sequence == other.Sequence else False

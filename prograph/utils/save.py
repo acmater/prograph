@@ -2,7 +2,7 @@ import os
 import pickle
 import prograph
 
-def save(pgraph,name=None,ext=".pkl",directory=None):
+def save(pgraph,name=None,ext=".csv",directory=None,ignored_cols=["Tokenized"]):
     """
     Save function that stores the entire landscape so that it can be reused without
     having to recompute distances and tokenizations
@@ -30,12 +30,10 @@ def save(pgraph,name=None,ext=".pkl",directory=None):
         else:
             directory, file = "./", "pgraph"
     if not name:
-        name = file.rsplit(".",1)[0]
+        name = file.rsplit(".",1)[0] + "_pgraph"
     print(f"Saving Graph to {name + ext}")
     try:
-        file = open(directory+name+ext,"wb")
-        file.write(pickle.dumps(pgraph.__dict__))
-        file.close()
+        pgraph.graph[[x for x in pgraph.graph if x not in ignored_cols]].to_csv(directory+name+ext)
     except Exception as e:
         print("Error occurred during saving:", e)
     return True

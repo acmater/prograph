@@ -40,6 +40,11 @@ X_train, Y_train, _, _, X_test, Y_test = pgraph("sklearn",distance=3,positions=[
 # Returns only train and test for the dataset with all sequences 3 mutations from wild type only mutated at positions 2, 9, and 11.
 ```
 ## Under the hood
+The graph is stored internally as a pandas dataframe. This frame is what is exported (to a csv) when saved and enables a storage efficient
+and flexible internal model that can be reconstructed at will.
+
+The codebase was designed to adhere to the functional paradigm as much as possible, with the class having internally stored data and a wide variety of functions which manipulate this data.
+
 The codebase was designed to be highly extensible, with some distance functions provided along with a cleaners to enable the generation of new distance functions with ease. The distance functions rely on broadcasting to rapidly perform pairwise comparisons, and thus in order to be efficiently vectorized and computed, any new distance functions must conform to this syntax.
 
 The codebase is also integratable with networkx and scipy, enabling graph analytics to be readily performed.
@@ -48,11 +53,9 @@ The codebase is also integratable with networkx and scipy, enabling graph analyt
 Major
 - Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
 - Add capacity to export graph to sparse matric object.
-- Rewrite internal graph structure so that it is stored as a pandas dataframe so that it is more space efficient.
 
 Minor
 - Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)
 - Add feature to write out its own graphml object
 - Add cosine similarity to distance metrics.
 - Add tests for pytorch dataloaders and sklearn data gatherers to ensure that they behave correctly when passed weird arguments.
-- When saving the graph, don't save the tokenized forms, as they are cheap to compute and take a lot of storage. 
