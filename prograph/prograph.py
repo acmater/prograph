@@ -32,6 +32,9 @@ class Prograph():
         Enables the user to explicitly provide the seed sequence as a string. Otherwise it
         will default to the first sequence in the dataset.
 
+    seqs_col : str, default="Sequence"
+        The string that identifies the sequence data within the csv file.
+
     columns : ["Fitness"]
         The columns to extract from the provided csv file.
 
@@ -134,12 +137,6 @@ class Prograph():
                 Modified positions are shown in green"""
 
     def __repr__(self):
-        self.csv_path        = csv_path
-        self.seed_seq        = seed_seq
-        self.seqs_col        = seqs_col
-        self.columns         = columns
-        self.index_col       = index_col
-        self.amino_acids
         return f"""Prograph(csv_path={self.csv_path},
                             seed_seq='{self.seed.Sequence}',
                             seqs_col='{self.seqs_col}',
@@ -201,7 +198,8 @@ class Prograph():
             idx = sequence
 
         elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
-            if isinstance(sequence[0], np.integer) or isinstance(sequence[0], int):
+            print(type(sequence[0]))
+            if isinstance(sequence[0], int) or isinstance(sequence[0],np.integer) or isinstance(sequence[0], np.bool_):
                 idx = sequence
             elif isinstance(sequence[0], str):
                 idx = [self.seq_idxs.get(seq, "This sequence is not in the dataset.") for seq in sequence]
@@ -534,6 +532,26 @@ class Prograph():
         distances = distance(self.tokenized,self.tokenize(seq)).numpy()
         idx = np.argmin(distances,axis=1)
         return self[idx], np.min(distances)
+
+    def neighbourhood(self,seq,eps,distance=hamming):
+        """
+        A neighbourhood function that takes a sequence and epsilon value and produces all sequences which fall within
+        this neighbourhood.
+
+        Parameters
+        ----------
+        seq : idx, str, tuple
+            The sequence that will form the locus of the neighbourhood.
+
+        eps : numeric
+            The episolon value that defines the radius of the neighbourhood.
+
+        distance : prograph.distance.function, default=hamming
+            The distance function uses to calculate the distances from the locus sequence.
+        """
+        #.reshape(1,-1)
+        distances = hamming(self.tokenized,np.atleast_2d(self.tokenized[self.query(seq)])) <= eps
+        return self[distances.numpy().flatten()]
 
     @staticmethod
     def get_every_n(a, n=2):
