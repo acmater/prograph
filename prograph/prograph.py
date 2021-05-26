@@ -11,6 +11,7 @@ import pandas as pd
 import networkx as nx
 import sklearn.utils as skutils
 import multiprocessing as mp
+from scipy import sparse
 from colorama import Fore, Style
 from functools import partial, reduce
 from .utils import Dataset, save
@@ -79,8 +80,7 @@ class Prograph():
         When saved, the csv will have the tokenized form removed as this is quite
         a cheap calculation and requires a large amount of storage, and thus not worth it.
 
-
-    Written by Adam Mater, last revision 20.5.21
+    Written by Adam Mater, last revision 26.5.21
     """
     def __init__(self,csv_path,
                       seed_seq=None,
@@ -94,6 +94,7 @@ class Prograph():
             raise FileNotFoundError("File could not be opened")
 
         self.csv_path        = csv_path
+        #self.name            = csv_path.split("/")[-1]
         self.seed_seq        = seed_seq
         self.seqs_col        = seqs_col
         self.columns         = columns
@@ -161,11 +162,15 @@ class Prograph():
         return self.graph.iloc[self.query(idx)]
 
     def __call__(self,label=None,**kwargs):
+        """
+        Overloaded call function to pass arguments to label_iter.
+        """
         return self.label_iter(label,**kwargs)
 
     def label_iter(self, label, **kwargs):
         """
-        Helper function that generates an iterable from the protein graph.
+        Helper function that generates an iterable from the protein graph. A copy of corresponding
+        portion of the dataframe is returned in order to ensure that the underlying data remains untouched.
 
         Parameters
         ----------
@@ -177,9 +182,9 @@ class Prograph():
         elif label == "sklearn":
             return self.sklearn_data(**kwargs)
         elif label == None:
-            return self.graph
+            return self.graph.copy()
         else:
-            return self.graph[label]
+            return self.graph[label].copy()
 
     def query(self,sequence):
         """
@@ -198,7 +203,6 @@ class Prograph():
             idx = sequence
 
         elif isinstance(sequence, np.ndarray) or isinstance(sequence, list):
-            print(type(sequence[0]))
             if isinstance(sequence[0], int) or isinstance(sequence[0],np.integer) or isinstance(sequence[0], np.bool_):
                 idx = sequence
             elif isinstance(sequence[0], str):
@@ -549,9 +553,35 @@ class Prograph():
         distance : prograph.distance.function, default=hamming
             The distance function uses to calculate the distances from the locus sequence.
         """
-        #.reshape(1,-1)
         distances = hamming(self.tokenized,np.atleast_2d(self.tokenized[self.query(seq)])) <= eps
         return self[distances.numpy().flatten()]
+
+    def neighbourhood_clustering(self,eps,distance=hamming):
+        """
+        Utilises the neighbourhood function to compute clusters within the dataset.
+
+        Parameters
+        ----------
+        seq : idx, str, tuple
+            The sequence that will form the locus of the neighbourhood.
+
+        eps : numeric
+            The episolon value that defines the radius of the neighbourhood.
+
+        distance : prograph.distance.function, default=hamming
+            The distance function uses to calculate the distances from the locus sequence.
+
+        # I am not sure if this is actually clustering, as entities are capable of being in multiple clusters simultaneously.
+        """
+        sequences = self("Sequence")
+        clusters = {}
+        skips = set()
+        for i,seq in tqdm.tqdm(enumerate(sequences)):
+            if i not in skips:
+                neighbours = self.neighbourhood(seq,eps,distance)
+                clusters[i] = neighbours
+                skips = skips | set(neighbours.index)
+        return clusters
 
     @staticmethod
     def get_every_n(a, n=2):
@@ -616,7 +646,7 @@ class Prograph():
         neighbour_dict = {k: v for d in final for k, v in d.items()}
         completed = []
         for i in range(len(gpu_tokenized)):
-            completed.append(neighbour_dict.get(i,np.array([],dtype=np.int)))
+            completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
 
         return completed
 
@@ -682,6 +712,18 @@ class Prograph():
         for i in range(len(self)):
             degrees[i] = len(self[i].neighbours)
         return degrees
+
+    def sparse(self):
+        """
+        Exports the neighbour data to a sparse matrix that can be used for later computation.
+        """
+        I = []
+        for i,J in enumerate(self("Neighbours")):
+            I.append(np.zeros(len(J),dtype=int) + 1*i)
+        I = np.concatenate(I)
+        J = np.concatenate(self("Neighbours").to_numpy())
+        V = np.ones(len(I))
+        return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
 
     ############################################################################
     ################### Data Manipulation and Slicing ##########################

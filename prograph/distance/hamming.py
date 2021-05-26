@@ -3,7 +3,6 @@ Hamming distance calculator
 """
 import torch
 import numpy as np
-#import tensorflow as tf
 from .utils import clean_input
 
 def hamming(X, Y):
@@ -29,7 +28,5 @@ def hamming(X, Y):
     X, Y = clean_input(X,Y)
     if isinstance(X,torch.Tensor):
         return torch.sum(X != Y[:,None,:],axis=2)
-    #elif isinstance(X,tf.Tensor):
-    #    return tf.reduce_sum(tf.cast(a != b[:,None,:],dtype=tf.int8),axis=2)
     else:
         return np.sum(X != Y[:,None,:],axis=2)

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.9
+
 import unittest
 import numpy as np
 import torch
@@ -126,6 +128,10 @@ class TestTokenization(unittest.TestCase):
         assert np.all(tokens == np.array([[1, 2, 2, 2, 1, 2, 1, 1, 1],[1, 2, 1, 1, 0, 0, 0, 0, 0]])), "Variable length tokenization is not working correctly."
     def test_empty_tokenization(self):
         assert len(pgraph.tokenize([])) == 0, "Tokenizing an empty object is not returning an empty object."
+
+class TestMatrixGeneration(unittest.TestCase):
+    def test_sparse_generation(self):
+        assert np.all(pgraph.sparse().todense()[:3,:3] == np.array([[0,1,1],[1,0,1],[1,1,0]])), "Sparse matrix generation is not working correctly."
 
 if __name__ == "__main__":
     unittest.main()
