@@ -115,9 +115,9 @@ class TestSavePrograph(unittest.TestCase):
     def test_save_pgraph(self):
         pgraph = Prograph(file="data/synthetic_data.csv")
         assert save(pgraph,name="test",directory="./"), "Protein graph could not be saved correctly"
-        new_pgraph = Prograph(file="test.csv")
+        new_pgraph = Prograph(file="test.pkl")
         assert new_pgraph[0]["Sequence"] == "AAA", "Graph loaded following saving is not functioning correctly."
-        os.remove("test.csv")
+        os.remove("test.pkl")
 
 class TestTokenization(unittest.TestCase):
     def test_basic_tokenization(self):

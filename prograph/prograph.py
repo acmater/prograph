@@ -121,6 +121,7 @@ class Prograph():
         self.seq_len = len(self.seed)
         self.len = len(self)
 
+        # The amino acids are encoded as utf-8 to facilitate fact array substitution in the tokenize function.
         self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
         self.tokenized = self.tokenize(self.graph[seqs_col])
 
@@ -134,10 +135,8 @@ class Prograph():
 
         if "Tokenized" not in self.graph:
             self.graph["Tokenized"] = [x for x in self.tokenized]
-            self.graph["Tokenized"] = self.graph["Tokenized"].astype(object)
         if "Neighbours" not in self.graph:
             self.graph["Neighbours"] = [x for x in self.build_graph()]
-            self.graph["Neighbours"] = self.graph["Neighbours"].astype(object)
 
         self.learners = {}
         print(self)
@@ -617,7 +616,8 @@ class Prograph():
         """
         Splits an array (numpy or pytorch) into chunks of size n and returns a generator.
         """
-        for i in range(a.shape[0] // n):
+        # Line below performs integer division but rounds result up so that final chunk is also returned.
+        for i in range((a.shape[0] // n) + (a.shape[0] % n > 0)):
             yield a[n*i:n*(i+1)]
 
     @staticmethod
@@ -722,26 +722,51 @@ class Prograph():
             degrees[i] = len(self[i].Neighbours)
         return degrees
 
-    def sparse(self,jacobian=False):
+    def get_neighbour_coords(self):
         """
-        Exports the neighbour data to a sparse matrix that can be used for later computation.
+        Gets the I,J neighbours coordinates to enable sparse matrix construction and operations.
 
-        Parameters
-        ----------
-        jacobian : bool, default=False
-            Whether or not to return the jacobian (matrix of first order differences) for the protein graph
+        Returns
+        -------
+        I : np.array
+            The row indices of the numpy neighbour positions
+
+        J : np.array
+            The column indices of the numpy neighbour positions
         """
         I = []
         for i,J in enumerate(self("Neighbours")):
             I.append(np.zeros(len(J),dtype=int) + 1*i)
         I = np.concatenate(I)
         J = np.concatenate(self("Neighbours").to_numpy())
-        V = np.ones(len(I))
-        if jacobian:
-            fitnesses = self("Fitness").to_numpy()
-            jac_V = fitnesses[I] - fitnesses[J]
-            return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self))), sparse.coo_matrix((jac_V,(I,J)),shape=(len(self),len(self)))
+        return I,J
+
+    def adjacency(self,weights=None):
+        """
+        Exports the neighbour data to a sparse adjacency matrix that can be used for later computation.
+
+        Parameters
+        ----------
+        weights : np.array, default=None
+            Weights that will replace the array of zeros used to indicate adjacency.
+        """
+        I, J = self.get_neighbour_coords()
+        if weights is None:
+            V = np.ones(len(I))
+        else:
+            assert len(weights) == len(I), "Dimension mismatch in weights vector and number of connections."
+            V = weights
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
+
+    def laplacian(self):
+        """
+        Exports the graph laplacian as a sparse matrix for later computation.
+        """
+        A = (-1) * self.adjacency()
+        D = self.degree()
+        A.setdiag(D)
+        return A
+
 
     def local_variance(self,scaler=MinMaxScaler):
         """
