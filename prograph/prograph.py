@@ -22,7 +22,16 @@ from .distance import hamming
 
 class Prograph():
     """
-    Class that handles a protein dataset
+    Class that handles a protein dataset. The graph is initialized by passing a csv
+    file to the csv_path argument. By default, the code recognises the sequences by a column
+    titled "Sequence". To modify this pass a new string argument to seqs_col. This information
+    is combined with an arbitrary number of labels columns. The default is just a column entitled "Fitness"
+    but any number can be passed and the labels will be associated with each node.
+
+    Finally, if neighbours are already present in the csv file they will be recognised and not
+    recalculated.
+
+    # TODO Make initialization more flexible.
 
     Parameters
     ----------
@@ -80,7 +89,7 @@ class Prograph():
         When saved, the csv will have the tokenized form removed as this is quite
         a cheap calculation and requires a large amount of storage, and thus not worth it.
 
-    Written by Adam Mater, last revision 26.5.21
+    Written by Adam Mater, last revision 10.6.21
     """
     def __init__(self,csv_path,
                       seed_seq=None,
@@ -155,9 +164,6 @@ class Prograph():
         """
         Customised __getitem__ that supports both integer and array indexing.
         """
-        #if isinstance(idx, np.ndarray) or isinstance(idx, list):
-            #return {x : self.graph.iloc[x] for x in self.query(idx)}
-        #else:
         return self.graph.iloc[self.query(idx)]
 
     def __call__(self,label=None,**kwargs):
@@ -457,6 +463,9 @@ class Prograph():
         return tokenized
 
     def boolean_mutant_array(self,seq=None):
+        """
+        Generates an array that highlights all mutated positions in the dataset relative to a seed sequence.
+        """
         return self.tokenized != self.tokenized[self.query(seq)]
 
     def calc_mutated_positions(self):
@@ -509,7 +518,7 @@ class Prograph():
         comp : <function _operator>, default=operator.eq
             An operator function that will be used to compare the epsilon value to the comparison vector.
         """
-        return np.where(comp(hamming(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
+        return np.where(comp(distance(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
 
     def nearest_neighbour(self,seq,distance=hamming,batch_size=8):
         # Todo correctly implement batching code - maybe make it into its own function.
@@ -719,7 +728,7 @@ class Prograph():
 
         Parameters
         ----------
-        scaler : sklearn.base.BaseEstimator, default=MinMaxScaler 
+        scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
             A scaler to scale the fitness values. Defaults to minmax scaler with default bounds (0,1)
         """
         variances = np.zeros(len(self))
