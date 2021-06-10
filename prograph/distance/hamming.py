@@ -25,7 +25,7 @@ def hamming(X, Y):
     -------
         torch.array, shape=(NxM)
     """
-    X, Y = clean_input(X,Y)
+    X,Y = clean_input(X,Y)
     if isinstance(X,torch.Tensor):
         return torch.sum(X != Y[:,None,:],axis=2)
     else:

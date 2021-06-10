@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import os
 from prograph.utils import save
+from prograph.distance import *
 
 from prograph import Prograph
 
@@ -132,6 +133,43 @@ class TestTokenization(unittest.TestCase):
 class TestMatrixGeneration(unittest.TestCase):
     def test_sparse_generation(self):
         assert np.all(pgraph.sparse().todense()[:3,:3] == np.array([[0,1,1],[1,0,1],[1,1,0]])), "Sparse matrix generation is not working correctly."
+
+class TestDistanceCalculators(unittest.TestCase):
+    # There needs to be a better way to check equality for tensors. See if I can use the assertAlmostEqual unittest method of pytorch tensors.
+    def test_2d2d_hamming(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([[1,2,3],[7,8,9]])
+        assert torch.all(hamming(X,Y) == torch.Tensor([[0,3],[3,3]])), "Hamming distance calculator not working for two 2D tensors."
+    def test_2d1d_hamming(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(hamming(X,Y) == torch.Tensor([[0,3]])), "Hamming distance calculator not working for one 1D tensor and one 2D tensor."
+    def test_1d1d_hamming(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(hamming(X,Y) == torch.Tensor([[3]])), "Hamming distance calculator not working for one 1D tensor and one 1D tensor."
+    def test_1dempty_hamming(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor()
+        with self.assertRaises(ValueError):
+            hamming(X,Y), "Empty vectors are not throwing value errors."
+    def test_2d2d_minkowski(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([[1,2,3],[7,8,9]])
+        assert torch.all(minkowski(X,Y) == torch.Tensor([[0.0000,5.19615242],[10.3923048454,  5.19615242]])), "minkowski distance calculator not working for two 2D tensors."
+    def test_2d1d_minkowski(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(minkowski(X,Y) == torch.Tensor([[0.0000,5.19615242]])), "minkowski distance calculator not working for one 1D tensor and one 2D tensor."
+    def test_1d1d_minkowski(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(minkowski(X,Y) == torch.Tensor([[5.19615242]])), "minkowski distance calculator not working for one 1D tensor and one 1D tensor."
+    def test_1dempty_minkowski(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor()
+        with self.assertRaises(ValueError):
+            minkowski(X,Y), "Empty vectors are not throwing value errors."
 
 if __name__ == "__main__":
     unittest.main()

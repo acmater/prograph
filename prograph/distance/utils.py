@@ -26,6 +26,8 @@ def clean_input(X,Y,verbose=False):
     -------
     X, Y
     """
+    if X.shape[0] == 0 or Y.shape[0] == 0:
+        raise ValueError("You cannot pass an empty tensor. Empty tensors will be padded with zeros and thus is calculates the distance from every sequence to the origin. If this is desired behaviour, manually pass a tensor of zeros the same size as the sequence tensor of interest.")
     X, Y = torch.atleast_2d(torch.as_tensor(X)), torch.atleast_2d(torch.as_tensor(Y))
     if X.shape[1] != Y.shape[1]:
         if verbose:
