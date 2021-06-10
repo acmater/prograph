@@ -767,6 +767,19 @@ class Prograph():
         A.setdiag(D)
         return A
 
+    def dirichlet(self,L=None):
+        """
+        Calculates the Dirichlet energy of the graph representation.
+
+        Parameters
+        ----------
+        L : scipy.sparse, default=None
+            A custom graph laplacian to be used in the computation.
+        """
+        fitness = self("Fitness").to_numpy().reshape(-1,1)
+        if L is None:
+            L = self.laplacian()
+        return fitness.T @ L @ fitness
 
     def local_variance(self,scaler=MinMaxScaler):
         """
