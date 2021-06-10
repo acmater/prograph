@@ -636,6 +636,8 @@ class Prograph():
                     idxs=None,
                     batch_size=8,
                     eps=1,
+                    k=None,
+                    representation="Tokenized",
                     distance=hamming,
                     comp=operator.eq):
         """
@@ -654,29 +656,39 @@ class Prograph():
         eps : numeric, default = 1
             The epsilon value that defines the local neighbourhood around the value of interest.
 
+        k : int, default=None
+            The number of k neighbours for k-nearest neighbour graph construction.
+
         distance : function, default=hamming
             The vectorized distance function to use.
 
         comp : <function _operator>, default=operator.eq
             The operator that will be used to compare the epsilon value and the batch of distances.
         """
+        assert not(bool(eps) and bool(k)), "Both epsilon and k cannot be provided as they are different methods of graph construction."
         if idxs is None:
             idxs = torch.arange(len(self))
-        gpu_tokenized = torch.as_tensor(self.tokenized[idxs,:].astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
+        gpu_tokenized = torch.as_tensor(self(representation),dtype=torch.float16,device=torch.device("cuda:0"))[idxs,:]
 
         results = []
-        for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-            results.append([x.cpu().numpy() for x in torch.where(comp(distance(gpu_tokenized,batch),eps))])
+        if eps:
+            for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
+                results.append([x.cpu().numpy() for x in torch.where(comp(distance(gpu_tokenized,batch),eps))])
 
-        final = []
-        for idx, result in enumerate(results):
-            final.append(self.prod_neighbours(idx,result))
+            final = []
+            for idx, result in enumerate(results):
+                final.append(self.prod_neighbours(idx,result))
 
-        neighbour_dict = {k: v for d in final for k, v in d.items()}
-        completed = []
-        for i in range(len(gpu_tokenized)):
-            completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
+            neighbour_dict = {k: v for d in final for k, v in d.items()}
 
+            completed = []
+            for i in range(len(gpu_tokenized)):
+                completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
+
+        else:
+            for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
+                results.append([x.cpu().numpy() for x in torch.sort(distance(gpu_tokenized,batch))[1][:,:k]])
+            completed = [item for sublist in results for item in sublist] #flatten the list
         return completed
 
     def graph_to_networkx(self,labels=None,update_self=False,iterable="Sequence"):
@@ -767,7 +779,7 @@ class Prograph():
         A.setdiag(D)
         return A
 
-    def dirichlet(self,L=None):
+    def dirichlet(self,L=None,scaler=MinMaxScaler):
         """
         Calculates the Dirichlet energy of the graph representation.
 
@@ -777,6 +789,8 @@ class Prograph():
             A custom graph laplacian to be used in the computation.
         """
         fitness = self("Fitness").to_numpy().reshape(-1,1)
+        scaler = scaler()
+        fitness = scaler.fit_transform(fitness)
         if L is None:
             L = self.laplacian()
         return fitness.T @ L @ fitness
