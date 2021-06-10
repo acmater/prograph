@@ -94,7 +94,6 @@ class Prograph():
             raise FileNotFoundError("File could not be opened")
 
         self.csv_path        = csv_path
-        #self.name            = csv_path.split("/")[-1]
         self.seed_seq        = seed_seq
         self.seqs_col        = seqs_col
         self.columns         = columns
@@ -650,26 +649,6 @@ class Prograph():
 
         return completed
 
-
-    def update_graph(self, data, label):
-        """
-        Function that updates the internal graph structure. The data array must have the same
-        order as protein sequences in the original graph.
-
-        Parameters
-        ----------
-        data : iterable
-            An iterable that contains the labels that will be used to update the graph.
-            The iterable must support positional indexing as its values will be accessed
-            as data[idx], where index is an integer.
-
-        label : str
-            A string that will be used as the key for this property in each Protein object
-        """
-        for idx, protein in self.graph.items():
-            setattr(protein, label, data[idx])
-        return None
-
     def graph_to_networkx(self,labels=None,update_self=False,iterable="Sequence"):
         """
         Produces a networkx graph from the internally stored graph object
@@ -710,12 +689,17 @@ class Prograph():
         """
         degrees = np.zeros((len(self),),dtype=np.int)
         for i in range(len(self)):
-            degrees[i] = len(self[i].neighbours)
+            degrees[i] = len(self[i].Neighbours)
         return degrees
 
-    def sparse(self):
+    def sparse(self,jacobian=False):
         """
         Exports the neighbour data to a sparse matrix that can be used for later computation.
+
+        Parameters
+        ----------
+        jacobian : bool, default=False
+            Whether or not to return the jacobian (matrix of first order differences) for the protein graph
         """
         I = []
         for i,J in enumerate(self("Neighbours")):
@@ -723,7 +707,29 @@ class Prograph():
         I = np.concatenate(I)
         J = np.concatenate(self("Neighbours").to_numpy())
         V = np.ones(len(I))
+        if jacobian:
+            fitnesses = self("Fitness").to_numpy()
+            jac_V = fitnesses[I] - fitnesses[J]
+            return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self))), sparse.coo_matrix((jac_V,(I,J)),shape=(len(self),len(self)))
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
+
+    def local_variance(self,scaler=MinMaxScaler):
+        """
+        Calculates the local variance for each node in the protein graph.
+
+        Parameters
+        ----------
+        scaler : sklearn.base.BaseEstimator, default=MinMaxScaler 
+            A scaler to scale the fitness values. Defaults to minmax scaler with default bounds (0,1)
+        """
+        variances = np.zeros(len(self))
+        fitnesses = self("Fitness").to_numpy()
+        scaler = scaler()
+        fitnesses = scaler.fit_transform(fitnesses.reshape(-1,1))
+        for i,J in enumerate(self("Neighbours")):
+            I = np.zeros(len(J),dtype=int) + 1*i
+            variances[i] = np.mean(fitnesses[I] - fitnesses[J])
+        return variances
 
     ############################################################################
     ################### Data Manipulation and Slicing ##########################
