@@ -23,7 +23,7 @@ from .distance import hamming
 class Prograph():
     """
     Class that handles a protein dataset. The graph is initialized by passing a csv
-    file to the csv_path argument. By default, the code recognises the sequences by a column
+    file to the file argument. By default, the code recognises the sequences by a column
     titled "Sequence". To modify this pass a new string argument to seqs_col. This information
     is combined with an arbitrary number of labels columns. The default is just a column entitled "Fitness"
     but any number can be passed and the labels will be associated with each node.
@@ -35,8 +35,8 @@ class Prograph():
 
     Parameters
     ----------
-    csv_path : str,default=None
-        Path to the csv file that should be imported using CSV loader function
+    file : str,default=None
+        Path to the dataframe file that should be imported using CSV loader function
 
     seed_seq : str, default=None
         Enables the user to explicitly provide the seed sequence as a string. Otherwise it
@@ -91,18 +91,23 @@ class Prograph():
 
     Written by Adam Mater, last revision 10.6.21
     """
-    def __init__(self,csv_path,
+    def __init__(self,file,
                       seed_seq=None,
                       seqs_col="Sequence",
                       columns=["Fitness"],
                       index_col=0,
                       amino_acids='ACDEFGHIKLMNPQRSTVWY'):
         try:
-            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=index_col)
+            ext = file.split(".")[-1]
+            if ext  == "csv":
+                self.graph = self.csvDataLoader(file,seqs_col=seqs_col,columns=columns,index_col=index_col)
+            elif ext == "pkl":
+                self.graph = pd.read_pickle(file)
+
         except:
             raise FileNotFoundError("File could not be opened")
 
-        self.csv_path        = csv_path
+        self.file            = file
         self.seed_seq        = seed_seq
         self.seqs_col        = seqs_col
         self.columns         = columns
@@ -127,8 +132,12 @@ class Prograph():
         self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.Sequence)
         self.mutation_arrays  = self.gen_mutation_arrays()
 
-        self.graph["Tokenized"] = [x for x in self.tokenized]
-        self.graph["Neighbours"] = [x for x in self.build_graph()]
+        if "Tokenized" not in self.graph:
+            self.graph["Tokenized"] = [x for x in self.tokenized]
+            self.graph["Tokenized"] = self.graph["Tokenized"].astype(object)
+        if "Neighbours" not in self.graph:
+            self.graph["Neighbours"] = [x for x in self.build_graph()]
+            self.graph["Neighbours"] = self.graph["Neighbours"].astype(object)
 
         self.learners = {}
         print(self)
@@ -146,7 +155,7 @@ class Prograph():
                 Modified positions are shown in green"""
 
     def __repr__(self):
-        return f"""Prograph(csv_path={self.csv_path},
+        return f"""Prograph(file={self.file},
                             seed_seq='{self.seed.Sequence}',
                             seqs_col='{self.seqs_col}',
                             columns={self.columns},
@@ -461,6 +470,18 @@ class Prograph():
             tokenized[np.where(sequences == char)] = token
 
         return tokenized
+
+    def embedding(self, embedded, name):
+        """
+        Flexible function to add an embedded representation of each sequence in the dataset.
+
+        embedded : np.array()
+            The array of embedded representations. Order must match the original sequence order.
+
+        name : str
+            A name that will be used to identify the embedding in the graph structure.
+        """
+        self.graph[f"{name}_embedded"] = embedded
 
     def boolean_mutant_array(self,seq=None):
         """

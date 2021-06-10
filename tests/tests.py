@@ -13,9 +13,9 @@ from prograph import Prograph
 
 class TestGenpgraph(unittest.TestCase):
     def gen_pgraph(self):
-        pgraph = Prograph(csv_path="data/synthetic_data.csv")
+        pgraph = Prograph(file="data/synthetic_data.csv")
 
-pgraph = Prograph(csv_path="data/synthetic_data.csv")
+pgraph = Prograph(file="data/synthetic_data.csv")
 
 class TestQuery(unittest.TestCase):
     def test_string_idx(self):
@@ -102,20 +102,20 @@ class TestNetworkx(unittest.TestCase):
 
 class TestLoadPrograph(unittest.TestCase):
     def test_load_pgraph(self):
-        pgraph = Prograph(csv_path="data/synthetic_data_pgraph.csv")
+        pgraph = Prograph(file="data/synthetic_data_pgraph.pkl")
         assert pgraph[0]["Fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
     def test_load_wrong_type(self):
         with self.assertRaises(AssertionError) and self.assertRaises(FileNotFoundError):
-            pgraph = Prograph(csv_path=2)
+            pgraph = Prograph(file=2)
     def test_load_empty(self):
         with self.assertRaises(FileNotFoundError):
-            pgraph = Prograph(csv_path=None)
+            pgraph = Prograph(file=None)
 
 class TestSavePrograph(unittest.TestCase):
     def test_save_pgraph(self):
-        pgraph = Prograph(csv_path="data/synthetic_data.csv")
+        pgraph = Prograph(file="data/synthetic_data.csv")
         assert save(pgraph,name="test",directory="./"), "Protein graph could not be saved correctly"
-        new_pgraph = Prograph(csv_path="test.csv")
+        new_pgraph = Prograph(file="test.csv")
         assert new_pgraph[0]["Sequence"] == "AAA", "Graph loaded following saving is not functioning correctly."
         os.remove("test.csv")
 
