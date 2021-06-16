@@ -93,6 +93,9 @@ class Prograph():
         When saved, the csv will have the tokenized form removed as this is quite
         a cheap calculation and requires a large amount of storage, and thus not worth it.
 
+        Any neighbour column calculated through either epsilon or kNN methods will have the values
+        stored as tuples (neighbours,weights). 
+
     Written by Adam Mater, last revision 10.6.21
     """
     def __init__(self,file,
@@ -662,7 +665,7 @@ class Prograph():
                     k=None,
                     weighted=False,
                     representation="Tokenized",
-                    distance="hamming",
+                    distance=hamming,
                     comp=operator.le):
         """
         Function to build the protein graph using GPU accelerated pairwise distance calculations.
@@ -706,11 +709,6 @@ class Prograph():
         comp : <function _operator>, default=operator.le
             The operator that will be used to compare the epsilon value and the batch of distances.
         """
-        distances = {"hamming"   : hamming,
-                     "minkowski" : minkowski}
-
-        distance = distances[distance.lower()]
-
         if operator.xor(bool(eps),bool(k)) is False:
             raise ValueError("Epsilon or K must be provided, but both cannot be as they are different methods of graph construction.")
         if k is not None:

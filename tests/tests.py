@@ -138,19 +138,19 @@ class TestMatrixGeneration(unittest.TestCase):
 class TestKNNGraphGeneration(unittest.TestCase):
     knn_test = Prograph("data/knntest_pgraph.pkl",columns="all")
     def test_generation_k1(self,knn_test=knn_test):
-        L = knn_test.build_graph(representation="Embedded",k=1,distance="minkowski")
+        L = knn_test.build_graph(representation="Embedded",k=1,distance=minkowski)
         L = [x[0] for x in L]
         assert np.all(np.array(L).reshape(-1,) == np.array([1,0,3,2,5,4])), "k-NN Graph Generation with K=1 is not working."
     def test_generation_k2(self,knn_test=knn_test):
-        L = knn_test.build_graph(representation="Embedded",k=2,distance="minkowski")
+        L = knn_test.build_graph(representation="Embedded",k=2,distance=minkowski)
         L = [x[0] for x in L]
         assert np.all(L == np.array([[1, 3],[0, 3],[3, 4],[2, 4],[5, 2],[4, 2]])), "k-NN Graph Generation with K=2 is not working."
     def test_generation_k0(self,knn_test=knn_test):
         with self.assertRaises(ValueError):
-            L = knn_test.build_graph(representation="Embedded",k=0,distance="minkowski"), "The code is not raising a ValueError when k=0 is passed."
+            L = knn_test.build_graph(representation="Embedded",k=0,distance=minkowski), "The code is not raising a ValueError when k=0 is passed."
     def test_generation_khalf(self,knn_test=knn_test):
         with self.assertRaises(TypeError):
-            L = knn_test.build_graph(representation="Embedded",k=0.5,distance="minkowski"), "The code is not raising a TypeError when a non-integer k value is passed."
+            L = knn_test.build_graph(representation="Embedded",k=0.5,distance=minkowski), "The code is not raising a TypeError when a non-integer k value is passed."
 
 class TestDistanceCalculators(unittest.TestCase):
     # There needs to be a better way to check equality for tensors. See if I can use the assertAlmostEqual unittest method of pytorch tensors.
