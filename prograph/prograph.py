@@ -94,7 +94,7 @@ class Prograph():
         a cheap calculation and requires a large amount of storage, and thus not worth it.
 
         Any neighbour column calculated through either epsilon or kNN methods will have the values
-        stored as tuples (neighbours,weights). 
+        stored as tuples (neighbours,weights).
 
     Written by Adam Mater, last revision 10.6.21
     """
@@ -783,7 +783,7 @@ class Prograph():
         else:
             return g
 
-    def degree(self):
+    def degree(self,graph="Neighbours"):
         """
         Method to calculate the degree of each node in the graph.
 
@@ -791,10 +791,13 @@ class Prograph():
         -------
         degrees : np.array,
             A numpy array where each value is the degree of the corresponding protein node in the graph.
+
+        graph : str, default="Neighours"
+            The graph that will be used to calculate the degree
         """
-        degrees = np.zeros((len(self),),dtype=np.int)
-        for i in range(len(self)):
-            degrees[i] = len(self[i].Neighbours)
+        degrees = np.zeros((len(self),),dtype=np.float32)
+        for i,edges in enumerate(self(graph)):
+            degrees[i] = np.sum(edges[1]) # Access just the weights term
         return degrees
 
     def get_neighbour_coords(self):

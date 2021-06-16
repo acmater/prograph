@@ -2,6 +2,7 @@
 
 import unittest
 import numpy as np
+import numpy.testing as npt
 import torch
 import os
 from prograph.utils import save
@@ -16,7 +17,6 @@ class TestGenpgraph(unittest.TestCase):
         pgraph = Prograph(file="data/synthetic_data.csv")
 
 pgraph = Prograph(file="data/synthetic_data.csv")
-print(pgraph.graph)
 
 class TestQuery(unittest.TestCase):
     def test_string_idx(self):
@@ -136,7 +136,7 @@ class TestMatrixGeneration(unittest.TestCase):
         assert np.all(pgraph.adjacency().todense()[:3,:3] == np.array([[0,1,1],[1,0,1],[1,1,0]])), "Adjacency matrix generation is not working correctly."
 
 class TestKNNGraphGeneration(unittest.TestCase):
-    knn_test = Prograph("data/knntest_pgraph.pkl",columns="all")
+    knn_test = Prograph("data/knntest_pgraph.pkl")
     def test_generation_k1(self,knn_test=knn_test):
         L = knn_test.build_graph(representation="Embedded",k=1,distance=minkowski)
         L = [x[0] for x in L]
@@ -151,6 +151,14 @@ class TestKNNGraphGeneration(unittest.TestCase):
     def test_generation_khalf(self,knn_test=knn_test):
         with self.assertRaises(TypeError):
             L = knn_test.build_graph(representation="Embedded",k=0.5,distance=minkowski), "The code is not raising a TypeError when a non-integer k value is passed."
+
+class TestGraphOperations(unittest.TestCase):
+    def test_degree_calculator_hamming(self):
+        assert np.all(pgraph.degree() == np.array([27 for x in range(1000)])), "Degree calculator with Hamming distance is no longer working."
+    def test_degree_calculator_minkowski(self):
+        knn_test = Prograph("data/knntest_pgraph.pkl")
+        knn_test.graph["Weighted"] = knn_test.build_graph(k=1, representation="Embedded", distance=minkowski)
+        npt.assert_almost_equal(knn_test.degree(graph="Weighted"),np.array([0.5, 0.5, 1., 1., 0.79052734,0.79052734])),"Degree calculator with Minkowski distance is no longer working."
 
 class TestDistanceCalculators(unittest.TestCase):
     # There needs to be a better way to check equality for tensors. See if I can use the assertAlmostEqual unittest method of pytorch tensors.
