@@ -428,7 +428,8 @@ class Prograph():
         """
         data         = pd.read_csv(csvfile,index_col=index_col)
         if columns == "all":
-            columns = list(data.keys()).remove(seqs_col)
+            columns = list(data.keys())
+            columns.remove(seqs_col)
         columns = [seqs_col] + columns
         if "Neighbours" in data:
             columns += ["Neighbours"]
@@ -640,11 +641,26 @@ class Prograph():
                     batch_size=8,
                     eps=None,
                     k=None,
+                    weighted=False,
                     representation="Tokenized",
                     distance="hamming",
                     comp=operator.eq):
         """
         Function to build the protein graph using GPU accelerated pairwise distance calculations.
+        The function contains two different generation methods - knn graph and epsilon neigbourhood.
+
+        kNN Graph generation involves calculating all pairwise distances, sorting the values, and selecting
+        the smallest k values as neighbours.
+
+        .. math::
+            \sum_i^k {x_i * y_i}
+
+        Epsilon neighbourhood graph generation calculates all pairwise distances and compares them against a
+        threshold value (epsilon). All nodes that are less than or equal to this threshold are added as
+        neighbours of the sequence in question.
+
+        .. math::
+            x = 3
 
         Parameters
         ----------
@@ -662,22 +678,34 @@ class Prograph():
         k : int, default=None
             The number of k neighbours for k-nearest neighbour graph construction.
 
-        distance : function, default=hamming
+        weighted : bool, default=False
+            Whether or not the graph that is generated contains the weights of the connections.
+
+        distance : <prograph.distance function>, default=hamming
             The vectorized distance function to use.
 
         comp : <function _operator>, default=operator.eq
             The operator that will be used to compare the epsilon value and the batch of distances.
         """
-        distance = distances.get(distance.lower(),"Not a distance method that is currently implemented.")
+        distances = {"hamming" : hamming,
+             "minkowski" : minkowski}
 
-        assert operator.xor(bool(eps),bool(k)), "Epsilon or K must be provided, but both cannot be as they are different methods of graph construction."
+        distance = distances.get(distance.lower(),"Not a distance method that is currently implemented.")
+        if operator.xor(bool(eps),bool(k)) is False:
+            raise ValueError("Epsilon or K must be provided, but both cannot be as they are different methods of graph construction.")
+        if k is not None:
+            if (not isinstance(k,int)):
+                raise TypeError("K must be provided as an integer.")
+
         if idxs is None:
-            idxs = torch.arange(len(self))
+            idxs = Ellipsis # Used to ensure that a slice is indexed instead of a copy.
+
         gpu_tokenized = torch.as_tensor(self(representation),dtype=torch.float16,device=torch.device("cuda:0"))[idxs,:]
 
         results = []
         if eps:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
+                distances = distance(gpu_tokenized,batch)
                 results.append([x.cpu().numpy() for x in torch.where(comp(distance(gpu_tokenized,batch),eps))])
 
             final = []
@@ -692,7 +720,9 @@ class Prograph():
 
         else:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-                results.append([x.cpu().numpy() for x in torch.sort(distance(gpu_tokenized,batch))[1][:,:k]])
+                results.append([x.cpu().numpy() for x in torch.sort(distance(gpu_tokenized,batch),dim=1)[1][:,1:k+1]])
+                # The [1] selects the arguments used to sort the tensor
+                # The [:,1:k+1] selects all rows, ignores the first element as the self distance is always 0, and then selects up to k+1 elements
             completed = [item for sublist in results for item in sublist] #flatten the list
         return completed
 
