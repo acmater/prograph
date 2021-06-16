@@ -806,7 +806,7 @@ class Prograph():
                 degrees[i] = len(edges[0]) # Access just the number of nodes
         else:
             for i,edges in enumerate(self(graph)):
-                degrees[i] = np.sum(edges[1]) # Access just the weights term
+                degrees[i] = np.sum(edges[1].astype(np.float32)) # Access just the weights term
         return degrees
 
     def get_neighbour_coords(self,graph="Neighbours",boolean_weights=False):
