@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import os
 from prograph.utils import save
+from prograph.distance import *
 
 from prograph import Prograph
 
@@ -12,9 +13,9 @@ from prograph import Prograph
 
 class TestGenpgraph(unittest.TestCase):
     def gen_pgraph(self):
-        pgraph = Prograph(csv_path="data/synthetic_data.csv")
+        pgraph = Prograph(file="data/synthetic_data.csv")
 
-pgraph = Prograph(csv_path="data/synthetic_data.csv")
+pgraph = Prograph(file="data/synthetic_data.csv")
 
 class TestQuery(unittest.TestCase):
     def test_string_idx(self):
@@ -101,22 +102,22 @@ class TestNetworkx(unittest.TestCase):
 
 class TestLoadPrograph(unittest.TestCase):
     def test_load_pgraph(self):
-        pgraph = Prograph(csv_path="data/synthetic_data_pgraph.csv")
+        pgraph = Prograph(file="data/synthetic_data_pgraph.pkl")
         assert pgraph[0]["Fitness"] == 0.660972597708149, "Loaded graph is not functioning correctly."
     def test_load_wrong_type(self):
         with self.assertRaises(AssertionError) and self.assertRaises(FileNotFoundError):
-            pgraph = Prograph(csv_path=2)
+            pgraph = Prograph(file=2)
     def test_load_empty(self):
         with self.assertRaises(FileNotFoundError):
-            pgraph = Prograph(csv_path=None)
+            pgraph = Prograph(file=None)
 
 class TestSavePrograph(unittest.TestCase):
     def test_save_pgraph(self):
-        pgraph = Prograph(csv_path="data/synthetic_data.csv")
+        pgraph = Prograph(file="data/synthetic_data.csv")
         assert save(pgraph,name="test",directory="./"), "Protein graph could not be saved correctly"
-        new_pgraph = Prograph(csv_path="test.csv")
+        new_pgraph = Prograph(file="test.pkl")
         assert new_pgraph[0]["Sequence"] == "AAA", "Graph loaded following saving is not functioning correctly."
-        os.remove("test.csv")
+        os.remove("test.pkl")
 
 class TestTokenization(unittest.TestCase):
     def test_basic_tokenization(self):
@@ -131,7 +132,59 @@ class TestTokenization(unittest.TestCase):
 
 class TestMatrixGeneration(unittest.TestCase):
     def test_sparse_generation(self):
-        assert np.all(pgraph.sparse().todense()[:3,:3] == np.array([[0,1,1],[1,0,1],[1,1,0]])), "Sparse matrix generation is not working correctly."
+        assert np.all(pgraph.adjacency().todense()[:3,:3] == np.array([[0,1,1],[1,0,1],[1,1,0]])), "Adjacency matrix generation is not working correctly."
+
+class TestKNNGraphGeneration(unittest.TestCase):
+    knn_test = Prograph("data/knntest_pgraph.pkl",columns="all")
+    def test_generation_k1(self,knn_test=knn_test):
+        L = knn_test.build_graph(representation="Embedded",k=1,distance="minkowski")
+        assert np.all(np.array(L).reshape(-1,) == np.array([1,0,3,2,5,4])), "k-NN Graph Generation with K=1 is not working."
+    def test_generation_k2(self,knn_test=knn_test):
+        L = knn_test.build_graph(representation="Embedded",k=2,distance="minkowski")
+        assert np.all(L == np.array([[1, 3],[0, 3],[3, 4],[2, 4],[5, 2],[4, 2]])), "k-NN Graph Generation with K=2 is not working."
+    def test_generation_k0(self,knn_test=knn_test):
+        with self.assertRaises(ValueError):
+            L = knn_test.build_graph(representation="Embedded",k=0,distance="minkowski"), "The code is not raising a ValueError when k=0 is passed."
+    def test_generation_khalf(self,knn_test=knn_test):
+        with self.assertRaises(TypeError):
+            L = knn_test.build_graph(representation="Embedded",k=0.5,distance="minkowski"), "The code is not raising a TypeError when a non-integer k value is passed."
+
+class TestDistanceCalculators(unittest.TestCase):
+    # There needs to be a better way to check equality for tensors. See if I can use the assertAlmostEqual unittest method of pytorch tensors.
+    def test_2d2d_hamming(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([[1,2,3],[7,8,9]])
+        assert torch.all(hamming(X,Y) == torch.Tensor([[0,3],[3,3]])), "Hamming distance calculator not working for two 2D tensors."
+    def test_2d1d_hamming(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(hamming(X,Y) == torch.Tensor([[0,3]])), "Hamming distance calculator not working for one 1D tensor and one 2D tensor."
+    def test_1d1d_hamming(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(hamming(X,Y) == torch.Tensor([[3]])), "Hamming distance calculator not working for one 1D tensor and one 1D tensor."
+    def test_1dempty_hamming(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor()
+        with self.assertRaises(ValueError):
+            hamming(X,Y), "Empty vectors are not throwing value errors."
+    def test_2d2d_minkowski(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([[1,2,3],[7,8,9]])
+        assert torch.all(minkowski(X,Y) == torch.Tensor([[0.0000,5.19615242],[10.3923048454,  5.19615242]])), "minkowski distance calculator not working for two 2D tensors."
+    def test_2d1d_minkowski(self):
+        X = torch.Tensor([[1,2,3],[4,5,6]])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(minkowski(X,Y) == torch.Tensor([[0.0000,5.19615242]])), "minkowski distance calculator not working for one 1D tensor and one 2D tensor."
+    def test_1d1d_minkowski(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor([1,2,3])
+        assert torch.all(minkowski(X,Y) == torch.Tensor([[5.19615242]])), "minkowski distance calculator not working for one 1D tensor and one 1D tensor."
+    def test_1dempty_minkowski(self):
+        X = torch.Tensor([4,5,6])
+        Y = torch.Tensor()
+        with self.assertRaises(ValueError):
+            minkowski(X,Y), "Empty vectors are not throwing value errors."
 
 if __name__ == "__main__":
     unittest.main()

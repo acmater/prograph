@@ -18,16 +18,28 @@ from .utils import Dataset, save
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
-from .distance import hamming
+from .distance import hamming, minkowski
+
+distances = {"hamming" : hamming,
+             "minkowski" : minkowski}
 
 class Prograph():
     """
-    Class that handles a protein dataset
+    Class that handles a protein dataset. The graph is initialized by passing a csv
+    file to the file argument. By default, the code recognises the sequences by a column
+    titled "Sequence". To modify this pass a new string argument to seqs_col. This information
+    is combined with an arbitrary number of labels columns. The default is just a column entitled "Fitness"
+    but any number can be passed and the labels will be associated with each node.
+
+    Finally, if neighbours are already present in the csv file they will be recognised and not
+    recalculated.
+
+    # TODO Make initialization more flexible.
 
     Parameters
     ----------
-    csv_path : str,default=None
-        Path to the csv file that should be imported using CSV loader function
+    file : str,default=None
+        Path to the dataframe file that should be imported using CSV loader function
 
     seed_seq : str, default=None
         Enables the user to explicitly provide the seed sequence as a string. Otherwise it
@@ -80,20 +92,25 @@ class Prograph():
         When saved, the csv will have the tokenized form removed as this is quite
         a cheap calculation and requires a large amount of storage, and thus not worth it.
 
-    Written by Adam Mater, last revision 26.5.21
+    Written by Adam Mater, last revision 10.6.21
     """
-    def __init__(self,csv_path,
+    def __init__(self,file,
                       seed_seq=None,
                       seqs_col="Sequence",
                       columns=["Fitness"],
                       index_col=0,
                       amino_acids='ACDEFGHIKLMNPQRSTVWY'):
         try:
-            self.graph = self.csvDataLoader(csv_path,seqs_col=seqs_col,columns=columns,index_col=index_col)
+            ext = file.split(".")[-1]
+            if ext  == "csv":
+                self.graph = self.csvDataLoader(file,seqs_col=seqs_col,columns=columns,index_col=index_col)
+            elif ext == "pkl":
+                self.graph = pd.read_pickle(file)
+
         except:
             raise FileNotFoundError("File could not be opened")
 
-        self.csv_path        = csv_path
+        self.file            = file
         self.seed_seq        = seed_seq
         self.seqs_col        = seqs_col
         self.columns         = columns
@@ -107,6 +124,7 @@ class Prograph():
         self.seq_len = len(self.seed)
         self.len = len(self)
 
+        # The amino acids are encoded as utf-8 to facilitate fact array substitution in the tokenize function.
         self.tokens          = {x:y for x,y in zip([x.encode("utf-8") for x in self.amino_acids], range(1,len(self.amino_acids)+1))}
         self.tokenized = self.tokenize(self.graph[seqs_col])
 
@@ -118,8 +136,10 @@ class Prograph():
         self.sequence_mutation_locations = self.boolean_mutant_array(self.seed.Sequence)
         self.mutation_arrays  = self.gen_mutation_arrays()
 
-        self.graph["Tokenized"] = [x for x in self.tokenized]
-        self.graph["Neighbours"] = [x for x in self.build_graph()]
+        if "Tokenized" not in self.graph:
+            self.graph["Tokenized"] = [x for x in self.tokenized]
+        if "Neighbours" not in self.graph:
+            self.graph["Neighbours"] = [x for x in self.build_graph(eps=1)]
 
         self.learners = {}
         print(self)
@@ -137,7 +157,7 @@ class Prograph():
                 Modified positions are shown in green"""
 
     def __repr__(self):
-        return f"""Prograph(csv_path={self.csv_path},
+        return f"""Prograph(file={self.file},
                             seed_seq='{self.seed.Sequence}',
                             seqs_col='{self.seqs_col}',
                             columns={self.columns},
@@ -155,9 +175,6 @@ class Prograph():
         """
         Customised __getitem__ that supports both integer and array indexing.
         """
-        #if isinstance(idx, np.ndarray) or isinstance(idx, list):
-            #return {x : self.graph.iloc[x] for x in self.query(idx)}
-        #else:
         return self.graph.iloc[self.query(idx)]
 
     def __call__(self,label=None,**kwargs):
@@ -411,7 +428,8 @@ class Prograph():
         """
         data         = pd.read_csv(csvfile,index_col=index_col)
         if columns == "all":
-            columns = list(data.keys()).remove(seqs_col)
+            columns = list(data.keys())
+            columns.remove(seqs_col)
         columns = [seqs_col] + columns
         if "Neighbours" in data:
             columns += ["Neighbours"]
@@ -456,7 +474,22 @@ class Prograph():
 
         return tokenized
 
+    def embedding(self, embedded, name):
+        """
+        Flexible function to add an embedded representation of each sequence in the dataset.
+
+        embedded : np.array()
+            The array of embedded representations. Order must match the original sequence order.
+
+        name : str
+            A name that will be used to identify the embedding in the graph structure.
+        """
+        self.graph[f"{name}_embedded"] = embedded
+
     def boolean_mutant_array(self,seq=None):
+        """
+        Generates an array that highlights all mutated positions in the dataset relative to a seed sequence.
+        """
         return self.tokenized != self.tokenized[self.query(seq)]
 
     def calc_mutated_positions(self):
@@ -509,7 +542,7 @@ class Prograph():
         comp : <function _operator>, default=operator.eq
             An operator function that will be used to compare the epsilon value to the comparison vector.
         """
-        return np.where(comp(hamming(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
+        return np.where(comp(distance(self.tokenized,self.tokenized[self.query(seq)].reshape(1,-1)),eps))[1] # Select the columns indexes.
 
     def nearest_neighbour(self,seq,distance=hamming,batch_size=8):
         # Todo correctly implement batching code - maybe make it into its own function.
@@ -587,7 +620,8 @@ class Prograph():
         """
         Splits an array (numpy or pytorch) into chunks of size n and returns a generator.
         """
-        for i in range(a.shape[0] // n):
+        # Line below performs integer division but rounds result up so that final chunk is also returned.
+        for i in range((a.shape[0] // n) + (a.shape[0] % n > 0)):
             yield a[n*i:n*(i+1)]
 
     @staticmethod
@@ -605,11 +639,28 @@ class Prograph():
     def build_graph(self,
                     idxs=None,
                     batch_size=8,
-                    eps=1,
-                    distance=hamming,
+                    eps=None,
+                    k=None,
+                    weighted=False,
+                    representation="Tokenized",
+                    distance="hamming",
                     comp=operator.eq):
         """
         Function to build the protein graph using GPU accelerated pairwise distance calculations.
+        The function contains two different generation methods - knn graph and epsilon neigbourhood.
+
+        kNN Graph generation involves calculating all pairwise distances, sorting the values, and selecting
+        the smallest k values as neighbours.
+
+        .. math::
+            \sum_i^k {x_i * y_i}
+
+        Epsilon neighbourhood graph generation calculates all pairwise distances and compares them against a
+        threshold value (epsilon). All nodes that are less than or equal to this threshold are added as
+        neighbours of the sequence in question.
+
+        .. math::
+            x = 3
 
         Parameters
         ----------
@@ -621,32 +672,58 @@ class Prograph():
             The batch chunks will have size (batch_size x len(self)), and as such batch_size should
             not be too large as otherwise it will not fit into memory.
 
-        eps : numeric, default = 1
+        eps : numeric, default=None
             The epsilon value that defines the local neighbourhood around the value of interest.
 
-        distance : function, default=hamming
+        k : int, default=None
+            The number of k neighbours for k-nearest neighbour graph construction.
+
+        weighted : bool, default=False
+            Whether or not the graph that is generated contains the weights of the connections.
+
+        distance : <prograph.distance function>, default=hamming
             The vectorized distance function to use.
 
         comp : <function _operator>, default=operator.eq
             The operator that will be used to compare the epsilon value and the batch of distances.
         """
+        distances = {"hamming" : hamming,
+             "minkowski" : minkowski}
+
+        distance = distances.get(distance.lower(),"Not a distance method that is currently implemented.")
+        if operator.xor(bool(eps),bool(k)) is False:
+            raise ValueError("Epsilon or K must be provided, but both cannot be as they are different methods of graph construction.")
+        if k is not None:
+            if (not isinstance(k,int)):
+                raise TypeError("K must be provided as an integer.")
+
         if idxs is None:
-            idxs = torch.arange(len(self))
-        gpu_tokenized = torch.as_tensor(self.tokenized[idxs,:].astype(np.float16),dtype=torch.float16,device=torch.device("cuda:0"))
+            idxs = Ellipsis # Used to ensure that a slice is indexed instead of a copy.
+
+        gpu_tokenized = torch.as_tensor(self(representation),dtype=torch.float16,device=torch.device("cuda:0"))[idxs,:]
 
         results = []
-        for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-            results.append([x.cpu().numpy() for x in torch.where(comp(distance(gpu_tokenized,batch),eps))])
+        if eps:
+            for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
+                distances = distance(gpu_tokenized,batch)
+                results.append([x.cpu().numpy() for x in torch.where(comp(distance(gpu_tokenized,batch),eps))])
 
-        final = []
-        for idx, result in enumerate(results):
-            final.append(self.prod_neighbours(idx,result))
+            final = []
+            for idx, result in enumerate(results):
+                final.append(self.prod_neighbours(idx,result))
 
-        neighbour_dict = {k: v for d in final for k, v in d.items()}
-        completed = []
-        for i in range(len(gpu_tokenized)):
-            completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
+            neighbour_dict = {k: v for d in final for k, v in d.items()}
 
+            completed = []
+            for i in range(len(gpu_tokenized)):
+                completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
+
+        else:
+            for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
+                results.append([x.cpu().numpy() for x in torch.sort(distance(gpu_tokenized,batch),dim=1)[1][:,1:k+1]])
+                # The [1] selects the arguments used to sort the tensor
+                # The [:,1:k+1] selects all rows, ignores the first element as the self distance is always 0, and then selects up to k+1 elements
+            completed = [item for sublist in results for item in sublist] #flatten the list
         return completed
 
     def graph_to_networkx(self,labels=None,update_self=False,iterable="Sequence"):
@@ -692,26 +769,75 @@ class Prograph():
             degrees[i] = len(self[i].Neighbours)
         return degrees
 
-    def sparse(self,jacobian=False):
+    def get_neighbour_coords(self):
         """
-        Exports the neighbour data to a sparse matrix that can be used for later computation.
+        Gets the I,J neighbours coordinates to enable sparse matrix construction and operations.
 
-        Parameters
-        ----------
-        jacobian : bool, default=False
-            Whether or not to return the jacobian (matrix of first order differences) for the protein graph
+        Returns
+        -------
+        I : np.array
+            The row indices of the numpy neighbour positions
+
+        J : np.array
+            The column indices of the numpy neighbour positions
         """
         I = []
         for i,J in enumerate(self("Neighbours")):
             I.append(np.zeros(len(J),dtype=int) + 1*i)
         I = np.concatenate(I)
         J = np.concatenate(self("Neighbours").to_numpy())
-        V = np.ones(len(I))
-        if jacobian:
-            fitnesses = self("Fitness").to_numpy()
-            jac_V = fitnesses[I] - fitnesses[J]
-            return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self))), sparse.coo_matrix((jac_V,(I,J)),shape=(len(self),len(self)))
+        return I,J
+
+    def adjacency(self,weights=None):
+        """
+        Exports the neighbour data to a sparse adjacency matrix that can be used for later computation.
+
+        Parameters
+        ----------
+        weights : np.array, default=None
+            Weights that will replace the array of zeros used to indicate adjacency.
+        """
+        I, J = self.get_neighbour_coords()
+        if weights is None:
+            V = np.ones(len(I))
+        else:
+            assert len(weights) == len(I), "Dimension mismatch in weights vector and number of connections."
+            V = weights
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
+
+    def laplacian(self, weighted=False):
+        """
+        Exports the graph laplacian as a sparse matrix for later computation.
+
+        Parameters
+        ----------
+        weighted : bool, default=False
+            Whether or not to use the edge weights or set all values to 1.
+        """
+        A = (-1) * self.adjacency()
+        D = self.degree()
+        A.setdiag(D)
+        return A
+
+    def dirichlet(self,L=None,scaler=MinMaxScaler):
+        """
+        Calculates the Dirichlet energy of the graph representation.
+
+        Parameters
+        ----------
+        L : scipy.sparse, default=None
+            A custom graph laplacian to be used in the computation.
+
+        scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
+            A scaler for the fitness values. Defaults to minmax scaler with default bounds (0,1)
+        """
+        fitness = self("Fitness").to_numpy().reshape(-1,1)
+        if scaler is not None:
+            scaler = scaler()
+            fitness = scaler.fit_transform(fitness)
+        if L is None:
+            L = self.laplacian()
+        return fitness.T @ L @ fitness
 
     def local_variance(self,scaler=MinMaxScaler):
         """
@@ -719,7 +845,7 @@ class Prograph():
 
         Parameters
         ----------
-        scaler : sklearn.base.BaseEstimator, default=MinMaxScaler 
+        scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
             A scaler to scale the fitness values. Defaults to minmax scaler with default bounds (0,1)
         """
         variances = np.zeros(len(self))
