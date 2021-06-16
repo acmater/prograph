@@ -155,10 +155,16 @@ class TestKNNGraphGeneration(unittest.TestCase):
 class TestGraphOperations(unittest.TestCase):
     def test_degree_calculator_hamming(self):
         assert np.all(pgraph.degree() == np.array([27 for x in range(1000)])), "Degree calculator with Hamming distance is no longer working."
+    def test_degree_calculator_minkowski_eps(self):
+        knn_test = Prograph("data/knntest_pgraph.pkl")
+        knn_test.graph["Weighted"] = knn_test.build_graph(eps=2, representation="Embedded", distance=minkowski)
+        npt.assert_almost_equal(knn_test.degree(graph="Weighted",boolean_weights=True),np.array([1, 1, 3, 2, 3,2])),"Degree calculator with Minkowski distance is no longer working."
+
     def test_degree_calculator_minkowski(self):
         knn_test = Prograph("data/knntest_pgraph.pkl")
         knn_test.graph["Weighted"] = knn_test.build_graph(k=1, representation="Embedded", distance=minkowski)
         npt.assert_almost_equal(knn_test.degree(graph="Weighted"),np.array([0.5, 0.5, 1., 1., 0.79052734,0.79052734])),"Degree calculator with Minkowski distance is no longer working."
+
 
 class TestDistanceCalculators(unittest.TestCase):
     # There needs to be a better way to check equality for tensors. See if I can use the assertAlmostEqual unittest method of pytorch tensors.

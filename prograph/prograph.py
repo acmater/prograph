@@ -783,21 +783,30 @@ class Prograph():
         else:
             return g
 
-    def degree(self,graph="Neighbours"):
+    def degree(self,graph="Neighbours",boolean_weights=False):
         """
         Method to calculate the degree of each node in the graph.
+
+        Parameters
+        ----------
+        graph : str, default="Neighours"
+            The graph that will be used to calculate the degree
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
 
         Returns
         -------
         degrees : np.array,
             A numpy array where each value is the degree of the corresponding protein node in the graph.
-
-        graph : str, default="Neighours"
-            The graph that will be used to calculate the degree
         """
         degrees = np.zeros((len(self),),dtype=np.float32)
-        for i,edges in enumerate(self(graph)):
-            degrees[i] = np.sum(edges[1]) # Access just the weights term
+        if boolean_weights:
+            for i,edges in enumerate(self(graph)):
+                degrees[i] = len(edges[0]) # Access just the number of nodes
+        else:
+            for i,edges in enumerate(self(graph)):
+                degrees[i] = np.sum(edges[1]) # Access just the weights term
         return degrees
 
     def get_neighbour_coords(self,graph="Neighbours",boolean_weights=False):
@@ -809,8 +818,8 @@ class Prograph():
         graph : str, default="Neighbours"
             The graph to be used when accessing the matrix construction.
 
-        weighted : bool, default=False
-            Whether or not to return the weights associated with each edge.
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
 
         Returns
         -------
@@ -820,8 +829,8 @@ class Prograph():
         J : np.array
             The column indices of the numpy neighbour positions
 
-        boolean_weights : bool, default=False
-            If True, will replace all weight values with a 1.
+        weights : bool, default=False
+            The weight associated with each edge.
         """
         I = []
         neighbours,weights = zip(*self(graph))
@@ -833,7 +842,7 @@ class Prograph():
             return I,J,np.ones(I.shape)
         else:
             weights = np.concatenate(weights)
-            return I,J,weights
+            return I,J,weights.astype(np.float32)
 
     def adjacency(self,graph="Neighbours",boolean_weights=False):
         """
@@ -850,28 +859,34 @@ class Prograph():
         I, J, V = self.get_neighbour_coords(graph=graph,boolean_weights=boolean_weights)
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
 
-    def laplacian(self, weighted=False):
+    def laplacian(self, graph="Neighbours",boolean_weights=False):
         """
         Exports the graph laplacian as a sparse matrix for later computation.
 
         Parameters
         ----------
-        weighted : bool, default=False
-            Whether or not to use the edge weights or set all values to 1.
-        """
-        A = (-1) * self.adjacency()
-        D = self.degree()
-        A.setdiag(D)
-        return A
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
 
-    def dirichlet(self,L=None,scaler=MinMaxScaler):
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
+        """
+        L = (-1) * self.adjacency(graph,boolean_weights)
+        D = self.degree(graph,boolean_weights)
+        L.setdiag(D)
+        return L
+
+    def dirichlet(self,graph="Neighbours",boolean_weights=False,scaler=MinMaxScaler):
         """
         Calculates the Dirichlet energy of the graph representation.
 
         Parameters
         ----------
-        L : scipy.sparse, default=None
-            A custom graph laplacian to be used in the computation.
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
 
         scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
             A scaler for the fitness values. Defaults to minmax scaler with default bounds (0,1)
@@ -880,8 +895,7 @@ class Prograph():
         if scaler is not None:
             scaler = scaler()
             fitness = scaler.fit_transform(fitness)
-        if L is None:
-            L = self.laplacian()
+        L = self.laplacian(graph,boolean_weights)
         return fitness.T @ L @ fitness
 
     def local_variance(self,scaler=MinMaxScaler):
