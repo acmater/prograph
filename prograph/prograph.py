@@ -18,7 +18,10 @@ from .utils import Dataset, save
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
-from .distance import hamming
+from .distance import hamming, minkowski
+
+distances = {"hamming" : hamming,
+             "minkowski" : minkowski}
 
 class Prograph():
     """
@@ -136,7 +139,7 @@ class Prograph():
         if "Tokenized" not in self.graph:
             self.graph["Tokenized"] = [x for x in self.tokenized]
         if "Neighbours" not in self.graph:
-            self.graph["Neighbours"] = [x for x in self.build_graph()]
+            self.graph["Neighbours"] = [x for x in self.build_graph(eps=1)]
 
         self.learners = {}
         print(self)
@@ -635,10 +638,10 @@ class Prograph():
     def build_graph(self,
                     idxs=None,
                     batch_size=8,
-                    eps=1,
+                    eps=None,
                     k=None,
                     representation="Tokenized",
-                    distance=hamming,
+                    distance="hamming",
                     comp=operator.eq):
         """
         Function to build the protein graph using GPU accelerated pairwise distance calculations.
@@ -653,7 +656,7 @@ class Prograph():
             The batch chunks will have size (batch_size x len(self)), and as such batch_size should
             not be too large as otherwise it will not fit into memory.
 
-        eps : numeric, default = 1
+        eps : numeric, default=None
             The epsilon value that defines the local neighbourhood around the value of interest.
 
         k : int, default=None
@@ -665,7 +668,9 @@ class Prograph():
         comp : <function _operator>, default=operator.eq
             The operator that will be used to compare the epsilon value and the batch of distances.
         """
-        assert not(bool(eps) and bool(k)), "Both epsilon and k cannot be provided as they are different methods of graph construction."
+        distance = distances.get(distance.lower(),"Not a distance method that is currently implemented.")
+
+        assert operator.xor(bool(eps),bool(k)), "Epsilon or K must be provided, but both cannot be as they are different methods of graph construction."
         if idxs is None:
             idxs = torch.arange(len(self))
         gpu_tokenized = torch.as_tensor(self(representation),dtype=torch.float16,device=torch.device("cuda:0"))[idxs,:]
@@ -770,9 +775,14 @@ class Prograph():
             V = weights
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
 
-    def laplacian(self):
+    def laplacian(self, weighted=False):
         """
         Exports the graph laplacian as a sparse matrix for later computation.
+
+        Parameters
+        ----------
+        weighted : bool, default=False
+            Whether or not to use the edge weights or set all values to 1.
         """
         A = (-1) * self.adjacency()
         D = self.degree()
@@ -787,10 +797,14 @@ class Prograph():
         ----------
         L : scipy.sparse, default=None
             A custom graph laplacian to be used in the computation.
+
+        scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
+            A scaler for the fitness values. Defaults to minmax scaler with default bounds (0,1)
         """
         fitness = self("Fitness").to_numpy().reshape(-1,1)
-        scaler = scaler()
-        fitness = scaler.fit_transform(fitness)
+        if scaler is not None:
+            scaler = scaler()
+            fitness = scaler.fit_transform(fitness)
         if L is None:
             L = self.laplacian()
         return fitness.T @ L @ fitness
