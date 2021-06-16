@@ -19,6 +19,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .protein import Protein
 from .distance import hamming, minkowski
+from .utils import flatten
 
 distances = {"hamming" : hamming,
              "minkowski" : minkowski}
@@ -91,6 +92,9 @@ class Prograph():
         The graph must contain three columns - ["Sequence","Tokenized","Neighbours"].
         When saved, the csv will have the tokenized form removed as this is quite
         a cheap calculation and requires a large amount of storage, and thus not worth it.
+
+        Any neighbour column calculated through either epsilon or kNN methods will have the values
+        stored as tuples (neighbours,weights). 
 
     Written by Adam Mater, last revision 10.6.21
     """
@@ -524,7 +528,7 @@ class Prograph():
     ##################### Graph Generation and Manipulation ####################
     ############################################################################
 
-    def calc_neighbours(self,seq,eps=1,distance=hamming,comp=operator.eq):
+    def calc_neighbours(self,seq,eps=1,distance=hamming,comp=operator.eq,weights=False):
         """
         Calcualtes the neighbours for a given sequence in the presence of a cutoff value.
 
@@ -625,15 +629,33 @@ class Prograph():
             yield a[n*i:n*(i+1)]
 
     @staticmethod
-    def prod_neighbours(index,out):
+    def prod_neighbours(index,out,batch_size,weights=None):
         """
         Function to convert output of np.where into arrays of neighbours.
+
+        Parameters
+        ----------
+        index : int
+            The index of the batch in which the neighbours were calculated.
+
+        out : [torch.Tensor, torch.Tensor]
+            The row,column indexes respectively for the neighbours in the batches.
+            Is unpacked within the code into row,col objects.
+
+        weights : np.array
+            The numpy array of weights that will be assigned to each edge.
+
+        batch_size : int
+            The size of the batch as an integer.
         """
         results = {}
-        idxs,neighbours = out
-        idxs = idxs + (index * 8)
-        for idx in np.unique(idxs):
-            results[idx] = neighbours[np.where(idxs == idx)]
+        row,col = out
+        row = row + (index * batch_size) # Scale row indexes up to batch index.
+        if weights is None:
+            weights = np.ones(col.shape)
+
+        for idx in np.unique(row):
+            results[idx] = (col[np.where(row == idx)],weights[np.where(row == idx)]) # Isolate the correct elements of the neighbours array
         return results
 
     def build_graph(self,
@@ -643,8 +665,8 @@ class Prograph():
                     k=None,
                     weighted=False,
                     representation="Tokenized",
-                    distance="hamming",
-                    comp=operator.eq):
+                    distance=hamming,
+                    comp=operator.le):
         """
         Function to build the protein graph using GPU accelerated pairwise distance calculations.
         The function contains two different generation methods - knn graph and epsilon neigbourhood.
@@ -684,13 +706,9 @@ class Prograph():
         distance : <prograph.distance function>, default=hamming
             The vectorized distance function to use.
 
-        comp : <function _operator>, default=operator.eq
+        comp : <function _operator>, default=operator.le
             The operator that will be used to compare the epsilon value and the batch of distances.
         """
-        distances = {"hamming" : hamming,
-             "minkowski" : minkowski}
-
-        distance = distances.get(distance.lower(),"Not a distance method that is currently implemented.")
         if operator.xor(bool(eps),bool(k)) is False:
             raise ValueError("Epsilon or K must be provided, but both cannot be as they are different methods of graph construction.")
         if k is not None:
@@ -702,28 +720,37 @@ class Prograph():
 
         gpu_tokenized = torch.as_tensor(self(representation),dtype=torch.float16,device=torch.device("cuda:0"))[idxs,:]
 
-        results = []
+        weights   = []
+        edge_idxs = []
         if eps:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
                 distances = distance(gpu_tokenized,batch)
-                results.append([x.cpu().numpy() for x in torch.where(comp(distance(gpu_tokenized,batch),eps))])
+                locations = torch.where((comp(distances,eps) & (distances > 0)))
 
+                weights.append(distances[locations].cpu().numpy())
+                edge_idxs.append([x.cpu().numpy() for x in locations])
+                # Checks two boolean conditions to ensure that nodes are not considered their own neighbours (i.e their distance is >0)
+
+            # Iterate over each batch and use prod_neighbours to alter indices so that they are correct.
             final = []
-            for idx, result in enumerate(results):
-                final.append(self.prod_neighbours(idx,result))
+            for idx, result in enumerate(edge_idxs):
+                final.append(self.prod_neighbours(idx,result,batch_size,weights=weights[idx]))
 
+            # Merge dictionaries in final
             neighbour_dict = {k: v for d in final for k, v in d.items()}
 
+            # Make a final pass and assign empty neighbour arrays to and sequences that do not have any neighbours.
             completed = []
             for i in range(len(gpu_tokenized)):
                 completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
 
         else:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-                results.append([x.cpu().numpy() for x in torch.sort(distance(gpu_tokenized,batch),dim=1)[1][:,1:k+1]])
-                # The [1] selects the arguments used to sort the tensor
+                sorted_ds = torch.sort(distance(gpu_tokenized,batch),dim=1)
+                weights.append([x.cpu().numpy() for x in sorted_ds[0][:,1:k+1]])
+                edge_idxs.append([x.cpu().numpy() for x in sorted_ds[1][:,1:k+1]])
                 # The [:,1:k+1] selects all rows, ignores the first element as the self distance is always 0, and then selects up to k+1 elements
-            completed = [item for sublist in results for item in sublist] #flatten the list
+            completed = list(zip(flatten(edge_idxs),flatten(weights)))
         return completed
 
     def graph_to_networkx(self,labels=None,update_self=False,iterable="Sequence"):
@@ -747,7 +774,8 @@ class Prograph():
         g = nx.Graph()
         for idx,prot in enumerate(prots):
             g.add_node(prot, **{labels[x] : label_iters[x][idx] for x in range(len(label_iters))})
-        for idx,neighbours in enumerate(tqdm.tqdm(self.label_iter("Neighbours"))):
+        neighbours_iter = [x[0] for x in self("Neighbours")]
+        for idx,neighbours in enumerate(tqdm.tqdm(neighbours_iter)):
             g.add_edges_from([(sequences[idx], sequences[neighbour_idx]) for neighbour_idx in neighbours])
         if update_self:
             self.networkx_graph = g
@@ -782,10 +810,11 @@ class Prograph():
             The column indices of the numpy neighbour positions
         """
         I = []
-        for i,J in enumerate(self("Neighbours")):
+        neighbours = [x[0] for x in  self("Neighbours")] # Access just the element for the neighbour index and not the weight vector.
+        for i,J in enumerate(neighbours):
             I.append(np.zeros(len(J),dtype=int) + 1*i)
         I = np.concatenate(I)
-        J = np.concatenate(self("Neighbours").to_numpy())
+        J = np.concatenate(neighbours)
         return I,J
 
     def adjacency(self,weights=None):
