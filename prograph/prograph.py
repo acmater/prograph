@@ -800,9 +800,17 @@ class Prograph():
             degrees[i] = np.sum(edges[1]) # Access just the weights term
         return degrees
 
-    def get_neighbour_coords(self):
+    def get_neighbour_coords(self,graph="Neighbours",boolean_weights=False):
         """
         Gets the I,J neighbours coordinates to enable sparse matrix construction and operations.
+
+        Parameters
+        ----------
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
+
+        weighted : bool, default=False
+            Whether or not to return the weights associated with each edge.
 
         Returns
         -------
@@ -811,30 +819,35 @@ class Prograph():
 
         J : np.array
             The column indices of the numpy neighbour positions
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
         """
         I = []
-        neighbours = [x[0] for x in  self("Neighbours")] # Access just the element for the neighbour index and not the weight vector.
+        neighbours,weights = zip(*self(graph))
         for i,J in enumerate(neighbours):
             I.append(np.zeros(len(J),dtype=int) + 1*i)
         I = np.concatenate(I)
         J = np.concatenate(neighbours)
-        return I,J
+        if boolean_weights:
+            return I,J,np.ones(I.shape)
+        else:
+            weights = np.concatenate(weights)
+            return I,J,weights
 
-    def adjacency(self,weights=None):
+    def adjacency(self,graph="Neighbours",boolean_weights=False):
         """
         Exports the neighbour data to a sparse adjacency matrix that can be used for later computation.
 
         Parameters
         ----------
-        weights : np.array, default=None
-            Weights that will replace the array of zeros used to indicate adjacency.
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
         """
-        I, J = self.get_neighbour_coords()
-        if weights is None:
-            V = np.ones(len(I))
-        else:
-            assert len(weights) == len(I), "Dimension mismatch in weights vector and number of connections."
-            V = weights
+        I, J, V = self.get_neighbour_coords(graph=graph,boolean_weights=boolean_weights)
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
 
     def laplacian(self, weighted=False):
