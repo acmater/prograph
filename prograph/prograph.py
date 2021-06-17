@@ -750,7 +750,7 @@ class Prograph():
             # Make a final pass and assign empty neighbour arrays to and sequences that do not have any neighbours.
             completed = []
             for i in range(len(gpu_tokenized)):
-                completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
+                completed.append(neighbour_dict.get(i,(np.array([],dtype=int),np.array([],dtype=int))))
 
         else:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
@@ -796,7 +796,8 @@ class Prograph():
 
     def degree(self,graph="Neighbours",boolean_weights=False):
         """
-        Method to calculate the degree of each node in the graph.
+        Method to calculate the degree of each node in the graph. If the graph is directed,
+        then this method calculates the outdegree of each node.
 
         Parameters
         ----------
@@ -870,7 +871,7 @@ class Prograph():
         I, J, V = self.get_neighbour_coords(graph=graph,boolean_weights=boolean_weights)
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
 
-    def laplacian(self, graph="Neighbours",boolean_weights=False):
+    def laplacian(self, graph="Neighbours",boolean_weights=False,mode="outdegree"):
         """
         Exports the graph laplacian as a sparse matrix for later computation.
 
@@ -881,13 +882,21 @@ class Prograph():
 
         boolean_weights : bool, default=False
             If True, will replace all weight values with a 1.
+
+        mode : str \u2208 ["indegree","outdegree"], default="outdegree"
+            Whether or not to use indegree or outdegree.
         """
         L = (-1) * self.adjacency(graph,boolean_weights)
-        D = self.degree(graph,boolean_weights)
+        if mode == "outdegree":
+            D = self.degree(graph,boolean_weights)
+        elif mode == "indegree":
+            D = (-1) * np.array(L.sum(0)).reshape(-1,)
+        else:
+            raise ValueError("Not a valid degree mode.")
         L.setdiag(D)
         return L
 
-    def dirichlet(self,graph="Neighbours",boolean_weights=False,scaler=MinMaxScaler):
+    def dirichlet(self,graph="Neighbours",boolean_weights=False,scaler=MinMaxScaler,mode="outdegree"):
         """
         Calculates the Dirichlet energy of the graph representation.
 
@@ -901,12 +910,15 @@ class Prograph():
 
         scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
             A scaler for the fitness values. Defaults to minmax scaler with default bounds (0,1)
+
+        mode : str \u2208 ["indegree","outdegree"], default="outdegree"
+            Whether or not to use indegree or outdegree.
         """
         fitness = self("Fitness").to_numpy().reshape(-1,1)
         if scaler is not None:
             scaler = scaler()
             fitness = scaler.fit_transform(fitness)
-        L = self.laplacian(graph,boolean_weights)
+        L = self.laplacian(graph=graph,boolean_weights=boolean_weights,mode=mode)
         return fitness.T @ L @ fitness
 
     def local_variance(self,scaler=MinMaxScaler):

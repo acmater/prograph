@@ -165,6 +165,9 @@ class TestGraphOperations(unittest.TestCase):
         knn_test.graph["Weighted"] = knn_test.build_graph(k=1, representation="Embedded", distance=minkowski)
         npt.assert_almost_equal(knn_test.degree(graph="Weighted"),np.array([0.5, 0.5, 1., 1., 0.79052734,0.79052734])),"Degree calculator with Minkowski distance is no longer working."
 
+# TODO write a function that ensures that the matrices that are generated are symmetric.
+class TestGraphSymmetry(unittest.TestCase):
+    pass
 
 class TestDistanceCalculators(unittest.TestCase):
     # There needs to be a better way to check equality for tensors. See if I can use the assertAlmostEqual unittest method of pytorch tensors.
