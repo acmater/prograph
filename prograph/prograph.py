@@ -35,8 +35,6 @@ class Prograph():
     Finally, if neighbours are already present in the csv file they will be recognised and not
     recalculated.
 
-    # TODO Make initialization more flexible.
-
     Parameters
     ----------
     file : str,default=None
@@ -94,7 +92,7 @@ class Prograph():
         a cheap calculation and requires a large amount of storage, and thus not worth it.
 
         Any neighbour column calculated through either epsilon or kNN methods will have the values
-        stored as tuples (neighbours,weights). 
+        stored as tuples (neighbours,weights).
 
     Written by Adam Mater, last revision 10.6.21
     """
@@ -664,6 +662,7 @@ class Prograph():
                     eps=None,
                     k=None,
                     weighted=False,
+                    similarity=False,
                     representation="Tokenized",
                     distance=hamming,
                     comp=operator.le):
@@ -703,6 +702,9 @@ class Prograph():
         weighted : bool, default=False
             Whether or not the graph that is generated contains the weights of the connections.
 
+        similariity : bool, default=False
+            Whether or not to convert the distances into a similarity metric.
+
         distance : <prograph.distance function>, default=hamming
             The vectorized distance function to use.
 
@@ -715,6 +717,9 @@ class Prograph():
             if (not isinstance(k,int)):
                 raise TypeError("K must be provided as an integer.")
 
+        if similarity and eps:
+            eps = 1/(1+eps) # Convert epsilon euclidean distance into similarity
+
         if idxs is None:
             idxs = Ellipsis # Used to ensure that a slice is indexed instead of a copy.
 
@@ -724,8 +729,11 @@ class Prograph():
         edge_idxs = []
         if eps:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-                distances = distance(gpu_tokenized,batch)
-                locations = torch.where((comp(distances,eps) & (distances > 0)))
+                distances = distance(gpu_tokenized,batch,similarity=similarity)
+                if similarity:
+                    locations = torch.where((comp(eps,distances) & (distances < 1))) # Order swapped as similarity is an inverse relationship.
+                else:
+                    locations = torch.where((comp(distances,eps) & (distances > 0)))
 
                 weights.append(distances[locations].cpu().numpy())
                 edge_idxs.append([x.cpu().numpy() for x in locations])
@@ -742,11 +750,14 @@ class Prograph():
             # Make a final pass and assign empty neighbour arrays to and sequences that do not have any neighbours.
             completed = []
             for i in range(len(gpu_tokenized)):
-                completed.append(neighbour_dict.get(i,np.array([],dtype=int)))
+                completed.append(neighbour_dict.get(i,(np.array([],dtype=int),np.array([],dtype=int))))
 
         else:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-                sorted_ds = torch.sort(distance(gpu_tokenized,batch),dim=1)
+                if similarity:
+                    sorted_ds = torch.sort(distance(gpu_tokenized,batch,similarity=similarity),dim=1,descending=True)
+                else:
+                    sorted_ds = torch.sort(distance(gpu_tokenized,batch,similarity=similarity),dim=1)
                 weights.append([x.cpu().numpy() for x in sorted_ds[0][:,1:k+1]])
                 edge_idxs.append([x.cpu().numpy() for x in sorted_ds[1][:,1:k+1]])
                 # The [:,1:k+1] selects all rows, ignores the first element as the self distance is always 0, and then selects up to k+1 elements
@@ -783,23 +794,44 @@ class Prograph():
         else:
             return g
 
-    def degree(self):
+    def degree(self,graph="Neighbours",boolean_weights=False):
         """
-        Method to calculate the degree of each node in the graph.
+        Method to calculate the degree of each node in the graph. If the graph is directed,
+        then this method calculates the outdegree of each node.
+
+        Parameters
+        ----------
+        graph : str, default="Neighours"
+            The graph that will be used to calculate the degree
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
 
         Returns
         -------
         degrees : np.array,
             A numpy array where each value is the degree of the corresponding protein node in the graph.
         """
-        degrees = np.zeros((len(self),),dtype=np.int)
-        for i in range(len(self)):
-            degrees[i] = len(self[i].Neighbours)
+        degrees = np.zeros((len(self),),dtype=np.float32)
+        if boolean_weights:
+            for i,edges in enumerate(self(graph)):
+                degrees[i] = len(edges[0]) # Access just the number of nodes
+        else:
+            for i,edges in enumerate(self(graph)):
+                degrees[i] = np.sum(edges[1].astype(np.float32)) # Access just the weights term
         return degrees
 
-    def get_neighbour_coords(self):
+    def get_neighbour_coords(self,graph="Neighbours",boolean_weights=False):
         """
         Gets the I,J neighbours coordinates to enable sparse matrix construction and operations.
+
+        Parameters
+        ----------
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
 
         Returns
         -------
@@ -808,64 +840,85 @@ class Prograph():
 
         J : np.array
             The column indices of the numpy neighbour positions
+
+        weights : bool, default=False
+            The weight associated with each edge.
         """
         I = []
-        neighbours = [x[0] for x in  self("Neighbours")] # Access just the element for the neighbour index and not the weight vector.
+        neighbours,weights = zip(*self(graph))
         for i,J in enumerate(neighbours):
             I.append(np.zeros(len(J),dtype=int) + 1*i)
         I = np.concatenate(I)
         J = np.concatenate(neighbours)
-        return I,J
+        if boolean_weights:
+            return I,J,np.ones(I.shape)
+        else:
+            weights = np.concatenate(weights)
+            return I,J,weights.astype(np.float32)
 
-    def adjacency(self,weights=None):
+    def adjacency(self,graph="Neighbours",boolean_weights=False):
         """
         Exports the neighbour data to a sparse adjacency matrix that can be used for later computation.
 
         Parameters
         ----------
-        weights : np.array, default=None
-            Weights that will replace the array of zeros used to indicate adjacency.
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
         """
-        I, J = self.get_neighbour_coords()
-        if weights is None:
-            V = np.ones(len(I))
-        else:
-            assert len(weights) == len(I), "Dimension mismatch in weights vector and number of connections."
-            V = weights
+        I, J, V = self.get_neighbour_coords(graph=graph,boolean_weights=boolean_weights)
         return sparse.coo_matrix((V,(I,J)),shape=(len(self),len(self)))
 
-    def laplacian(self, weighted=False):
+    def laplacian(self, graph="Neighbours",boolean_weights=False,mode="outdegree"):
         """
         Exports the graph laplacian as a sparse matrix for later computation.
 
         Parameters
         ----------
-        weighted : bool, default=False
-            Whether or not to use the edge weights or set all values to 1.
-        """
-        A = (-1) * self.adjacency()
-        D = self.degree()
-        A.setdiag(D)
-        return A
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
 
-    def dirichlet(self,L=None,scaler=MinMaxScaler):
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
+
+        mode : str \u2208 ["indegree","outdegree"], default="outdegree"
+            Whether or not to use indegree or outdegree.
+        """
+        L = (-1) * self.adjacency(graph,boolean_weights)
+        if mode == "outdegree":
+            D = self.degree(graph,boolean_weights)
+        elif mode == "indegree":
+            D = (-1) * np.array(L.sum(0)).reshape(-1,)
+        else:
+            raise ValueError("Not a valid degree mode.")
+        L.setdiag(D)
+        return L
+
+    def dirichlet(self,graph="Neighbours",boolean_weights=False,scaler=MinMaxScaler,mode="outdegree"):
         """
         Calculates the Dirichlet energy of the graph representation.
 
         Parameters
         ----------
-        L : scipy.sparse, default=None
-            A custom graph laplacian to be used in the computation.
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
 
         scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
             A scaler for the fitness values. Defaults to minmax scaler with default bounds (0,1)
+
+        mode : str \u2208 ["indegree","outdegree"], default="outdegree"
+            Whether or not to use indegree or outdegree.
         """
         fitness = self("Fitness").to_numpy().reshape(-1,1)
         if scaler is not None:
             scaler = scaler()
             fitness = scaler.fit_transform(fitness)
-        if L is None:
-            L = self.laplacian()
+        L = self.laplacian(graph=graph,boolean_weights=boolean_weights,mode=mode)
         return fitness.T @ L @ fitness
 
     def local_variance(self,scaler=MinMaxScaler):

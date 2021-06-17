@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from .utils import clean_input
 
-def hamming(X, Y):
+def hamming(X, Y, similarity=False):
     """
     Hamming distance calculator for two blocks of row vectors X and Y. Y will be broadcast
     across X and as such X is usually the full dataset, while Y is a subset. The two tensors
@@ -21,12 +21,19 @@ def hamming(X, Y):
         The second tensor of row vectors that will be stretched across the first
         to calculate pairwise distances.
 
+    similarity : bool, default=False
+        Whether or not to return the distance values as similarity values.
+
+
     Returns
     -------
         torch.array, shape=(NxM)
     """
     X,Y = clean_input(X,Y)
     if isinstance(X,torch.Tensor):
-        return torch.sum(X != Y[:,None,:],axis=2)
+        distances = torch.sum(X != Y[:,None,:],axis=2)
     else:
-        return np.sum(X != Y[:,None,:],axis=2)
+        distances = np.sum(X != Y[:,None,:],axis=2)
+    if similarity:
+        distances = 1/(1+distances)
+    return distances
