@@ -35,8 +35,6 @@ class Prograph():
     Finally, if neighbours are already present in the csv file they will be recognised and not
     recalculated.
 
-    # TODO Make initialization more flexible.
-
     Parameters
     ----------
     file : str,default=None
@@ -664,6 +662,7 @@ class Prograph():
                     eps=None,
                     k=None,
                     weighted=False,
+                    similarity=False,
                     representation="Tokenized",
                     distance=hamming,
                     comp=operator.le):
@@ -703,6 +702,9 @@ class Prograph():
         weighted : bool, default=False
             Whether or not the graph that is generated contains the weights of the connections.
 
+        similariity : bool, default=False
+            Whether or not to convert the distances into a similarity metric.
+
         distance : <prograph.distance function>, default=hamming
             The vectorized distance function to use.
 
@@ -715,6 +717,9 @@ class Prograph():
             if (not isinstance(k,int)):
                 raise TypeError("K must be provided as an integer.")
 
+        if similarity and eps:
+            eps = 1/(1+eps) # Convert epsilon euclidean distance into similarity
+
         if idxs is None:
             idxs = Ellipsis # Used to ensure that a slice is indexed instead of a copy.
 
@@ -724,8 +729,11 @@ class Prograph():
         edge_idxs = []
         if eps:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-                distances = distance(gpu_tokenized,batch)
-                locations = torch.where((comp(distances,eps) & (distances > 0)))
+                distances = distance(gpu_tokenized,batch,similarity=similarity)
+                if similarity:
+                    locations = torch.where((comp(eps,distances) & (distances < 1))) # Order swapped as similarity is an inverse relationship.
+                else:
+                    locations = torch.where((comp(distances,eps) & (distances > 0)))
 
                 weights.append(distances[locations].cpu().numpy())
                 edge_idxs.append([x.cpu().numpy() for x in locations])
@@ -746,7 +754,10 @@ class Prograph():
 
         else:
             for batch in tqdm.tqdm(list(self.get_every_n(gpu_tokenized,n=batch_size))):
-                sorted_ds = torch.sort(distance(gpu_tokenized,batch),dim=1)
+                if similarity:
+                    sorted_ds = torch.sort(distance(gpu_tokenized,batch,similarity=similarity),dim=1,descending=True)
+                else:
+                    sorted_ds = torch.sort(distance(gpu_tokenized,batch,similarity=similarity),dim=1)
                 weights.append([x.cpu().numpy() for x in sorted_ds[0][:,1:k+1]])
                 edge_idxs.append([x.cpu().numpy() for x in sorted_ds[1][:,1:k+1]])
                 # The [:,1:k+1] selects all rows, ignores the first element as the self distance is always 0, and then selects up to k+1 elements

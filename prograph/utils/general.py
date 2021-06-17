@@ -1,2 +1,6 @@
+"""
+Some general python utility functions.
+"""
+
 def flatten(lst):
-    return [item for sublist in lst for item in sublist] 
+    return [item for sublist in lst for item in sublist]
