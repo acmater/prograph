@@ -921,12 +921,18 @@ class Prograph():
         L = self.laplacian(graph=graph,boolean_weights=boolean_weights,mode=mode)
         return fitness.T @ L @ fitness
 
-    def local_variance(self,scaler=MinMaxScaler):
+    def local_variance(self,graph="Neighbours",boolean_weights=False,scaler=MinMaxScaler):
         """
         Calculates the local variance for each node in the protein graph.
 
         Parameters
         ----------
+        graph : str, default="Neighbours"
+            The graph to be used when accessing the matrix construction.
+
+        boolean_weights : bool, default=False
+            If True, will replace all weight values with a 1.
+
         scaler : sklearn.base.BaseEstimator, default=MinMaxScaler
             A scaler to scale the fitness values. Defaults to minmax scaler with default bounds (0,1)
         """
@@ -934,9 +940,9 @@ class Prograph():
         fitnesses = self("Fitness").to_numpy()
         scaler = scaler()
         fitnesses = scaler.fit_transform(fitnesses.reshape(-1,1))
-        for i,J in enumerate(self("Neighbours")):
-            I = np.zeros(len(J),dtype=int) + 1*i
-            variances[i] = np.mean(fitnesses[I] - fitnesses[J])
+        for i,(neighbours,weights) in enumerate(self(graph)):
+            I = np.zeros(len(neighbours),dtype=int) + 1*i
+            variances[i] = np.mean(fitnesses[I] - fitnesses[neighbours])
         return variances
 
     ############################################################################
