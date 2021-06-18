@@ -59,28 +59,23 @@ class TestDistanceGeneration(unittest.TestCase):
 
 class TestPyTorchDataLoaders(unittest.TestCase):
     def test_pytorch_dataloader_generation(self):
-        train, test = pgraph.pytorch_dataloaders()
+        train, test = pgraph.pytorch_dataloaders().values()
         assert len(next(iter(test))[0]) == 200, "Failed to generate dataloaders with default arguments"
-
     def test_pytorch_dataloader_generation_indexing(self):
         idxs = np.arange(10)
-        train, test = pgraph.pytorch_dataloaders(idxs=idxs)
+        train, test = pgraph.pytorch_dataloaders(idxs=idxs).values()
         assert len(next(iter(test))[0]) == 2, "Failed to generate dataloaders when particular indices are provided"
-
     def test_pytorch_dataloader_distances(self):
-        train_dl, test_dl = pgraph.pytorch_dataloaders(idxs=pgraph.indexing(distances=1))
+        train_dl, test_dl = pgraph.pytorch_dataloaders(idxs=pgraph.indexing(distances=1)).values()
         assert len(next(iter(test_dl))[0]) == 6, "Failed to generate dataloaders for a single distance"
-
     def test_pytorch_dataloader_multiple_distances(self):
-        train_dl, test_dl = pgraph.pytorch_dataloaders(idxs=pgraph.indexing(distances=[1,2]))
+        train_dl, test_dl = pgraph.pytorch_dataloaders(idxs=pgraph.indexing(distances=[1,2])).values()
         assert len(next(iter(test_dl))[0]) == 54, "Failed to generate dataloaders for multiple distances"
-
     def test_pytorch_dataloader_positions(self):
-        train_dl, test_dl = pgraph.pytorch_dataloaders(idxs=pgraph.indexing(positions=[1,2]))
+        train_dl, test_dl = pgraph.pytorch_dataloaders(idxs=pgraph.indexing(positions=[1,2])).values()
         assert len(next(iter(test_dl))[0]) == 20, "Failed to generate dataloaders for particular positions"
-
     def test_pytorch_dataloader_unsupervised(self):
-        train_dl, test_dl = pgraph.pytorch_dataloaders(unsupervised=True)
+        train_dl, test_dl = pgraph.pytorch_dataloaders(unsupervised=True).values()
         assert torch.all(0 == next(iter(test_dl))[1]) and len(next(iter(test_dl))[1]) == 200, "Failed to generate correct unsupervised dataloaders"
 
 class TestLabelIter(unittest.TestCase):

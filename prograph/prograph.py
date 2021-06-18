@@ -764,7 +764,7 @@ class Prograph():
             completed = list(zip(flatten(edge_idxs),flatten(weights)))
         return completed
 
-    def graph_to_networkx(self,labels=None,update_self=False,iterable="Sequence"):
+    def graph_to_networkx(self,graph="Neighbours",labels=None,update_self=False,iterable="Sequence"):
         """
         Produces a networkx graph from the internally stored graph object
 
@@ -776,16 +776,16 @@ class Prograph():
         """
         # So the problem here is that I do not know how to stick labels on with the
         # nodes. As a result, cytoscape won't be able to visualize the graphs properly.
-        sequences = self.label_iter(iterable)
+        sequences = self(iterable)
         label_iters = []
         if labels is not None:
             for label in labels:
-                label_iters.append(self.label_iter(label))
+                label_iters.append(self(label))
         prots = [prot for prot in sequences]
         g = nx.Graph()
         for idx,prot in enumerate(prots):
             g.add_node(prot, **{labels[x] : label_iters[x][idx] for x in range(len(label_iters))})
-        neighbours_iter = [x[0] for x in self("Neighbours")]
+        neighbours_iter = [x[0] for x in self(graph)]
         for idx,neighbours in enumerate(tqdm.tqdm(neighbours_iter)):
             g.add_edges_from([(sequences[idx], sequences[neighbour_idx]) for neighbour_idx in neighbours])
         if update_self:
@@ -1019,6 +1019,7 @@ class Prograph():
             fitnesses = labels.reshape(-1,1)
             labels = scaler.fit_transform(fitnesses).reshape(-1)
 
+        labels = labels.ravel()
         split1, split2 = int(len(tokenized)*split[0]), int(len(tokenized)*sum(split[:2]))
 
         x_train, x_val, x_test = tokenized[:split1], tokenized[split1:split2], tokenized[split2:]
@@ -1116,7 +1117,6 @@ class Prograph():
             data_labels = {torch.Tensor(tokenize.astype('float32')).long() : label for tokenize,label in zip(tokenized,labels)}
 
         keys   = list(data_labels.keys())
-
         split_points = [int(len(tokenized)*split[0]), int(len(tokenized)*sum(split[:2]))]
 
         return self.gen_dataloaders(labels=data_labels, keys=keys, params=params, split_points=split_points)
@@ -1145,7 +1145,7 @@ class Prograph():
         Example Syntax - landscape.fit(LinearRegressor,{"fit_intercept" : True})
             Fits a sklearn linear regressor with the fit intercept attribute set to True.
         """
-        x_train, y_train, x_test, y_test = self("sklearn",**kwargs)
+        x_train, y_train, _, _, x_test, y_test = self("sklearn",**kwargs)
         model = model(**model_args)
         if model.__class__.__name__ == "NeuralNetRegressor":
             y_train, y_test = y_train.reshape(-1,1), y_test.reshape(-1,1)
