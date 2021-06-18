@@ -966,7 +966,7 @@ class Prograph():
     def sklearn_data(self,
                      data=None,
                      idxs=None,
-                     token_form="Tokenized",
+                     representation="Tokenized",
                      labels=["Fitness"],
                      split=[0.8,0,0.2],
                      scaler=False,
@@ -1008,26 +1008,25 @@ class Prograph():
         if data is not None:
             data = data
         elif idxs is not None:
-            tokenized,labels = self(token_form)[idx], np.vstack([self(label)[idx] for label in labels]).T
+            tokenized,labels = np.vstack(self(representation)[idx]), np.vstack([self(label)[idx] for label in labels]).T
         else:
-            tokenized,labels = self(token_form), np.vstack([self(label) for label in labels]).T
+            tokenized,labels = np.vstack(self(representation)), np.vstack([self(label) for label in labels]).T
 
         if shuffle:
             tokenized, labels = skutils.shuffle(tokenized,labels,random_state=random_state)
 
         if scaler:
             fitnesses = labels.reshape(-1,1)
-            scaler.fit(fitnesses)
-            labels = scaler.transform(fitnesses).reshape(-1)
+            labels = scaler.fit_transform(fitnesses).reshape(-1)
 
         split1, split2 = int(len(tokenized)*split[0]), int(len(tokenized)*sum(split[:2]))
 
         x_train, x_val, x_test = tokenized[:split1], tokenized[split1:split2], tokenized[split2:]
         y_train, y_val, y_test = labels[:split1],   labels[split1:split2],  labels[split2:]
 
-        return x_train.astype("int"), y_train.astype("float"), \
-               x_val.astype("int"),   y_val.astype("float"), \
-               x_test.astype("int"),  y_test.astype("float")
+        return x_train.astype("float"), y_train.astype("float"), \
+               x_val.astype("float"),   y_val.astype("float"), \
+               x_test.astype("float"),  y_test.astype("float")
 
     def gen_dataloaders(self,labels,keys,params,split_points):
         """
@@ -1057,16 +1056,18 @@ class Prograph():
         partition = {"train" : keys[:split1],
                      "val"   : keys[split1:split2],
                      "test"  : keys[split2:]}
-        training_set = Dataset(partition["train"], labels)
-        training_generator = torch.utils.data.DataLoader(training_set, **params)
-        test_set = Dataset(partition["test"], labels)
-        test_generator = torch.utils.data.DataLoader(test_set, **params)
-        return training_generator, test_generator
+        data_generators = {}
+        for key in partition:
+            if len(partition[key]) == 0:
+                continue # skip empty partitions.
+            data_set = Dataset(partition[key], labels)
+            data_generators[key] = torch.utils.data.DataLoader(data_set, **params)
+        return data_generators
 
     def pytorch_dataloaders(self,
                             split=[0.8,0,0.2],
                             idxs=None,
-                            token_form="Tokenized",
+                            representation="Tokenized",
                             labels=["Fitness"],
                             distance=False,
                             positions=None,
@@ -1105,14 +1106,14 @@ class Prograph():
             to enable better gradient movement
         """
         if idxs is not None:
-            tokenized,labels = self(token_form)[idxs], np.vstack([self(label)[idxs] for label in labels]).T
+            tokenized,labels = np.vstack(self(representation)[idxs]), np.vstack([self(label)[idxs] for label in labels]).T
         else:
-            tokenized,labels = self(token_form), np.vstack([self(label) for label in labels]).T
+            tokenized,labels = np.vstack(self(representation)), np.vstack([self(label) for label in labels]).T
 
         if unsupervised:
-            data_labels = {torch.Tensor(tokenize.astype('int8')).long() : real_label for tokenize in tokenized}
+            data_labels = {torch.Tensor(tokenize.astype('float32')).long() : real_label for tokenize in tokenized}
         else:
-            data_labels = {torch.Tensor(tokenize.astype('int8')).long() : label for tokenize,label in zip(tokenized,labels)}
+            data_labels = {torch.Tensor(tokenize.astype('float32')).long() : label for tokenize,label in zip(tokenized,labels)}
 
         keys   = list(data_labels.keys())
 
