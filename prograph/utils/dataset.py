@@ -27,8 +27,3 @@ class Dataset(torch.utils.data.Dataset):
         y = self.labels[ID]
 
         return X, y
-
-def map_str(string,char_encoding):
-    hold = torch.Tensor([char_encoding[x] for x in string])
-    hold = hold.long()
-    return hold

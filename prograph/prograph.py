@@ -671,7 +671,10 @@ class Prograph():
         The function contains two different generation methods - knn graph and epsilon neigbourhood.
 
         kNN Graph generation involves calculating all pairwise distances, sorting the values, and selecting
-        the smallest k values as neighbours.
+        the smallest k values as neighbours. It is important to note that by their definition, kNN graphs
+        are directed, and thus are subject to additional complications.
+
+        # TODO - update maths section
 
         .. math::
             \sum_i^k {x_i * y_i}
