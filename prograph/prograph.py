@@ -21,9 +21,6 @@ from .protein import Protein
 from .distance import hamming, minkowski
 from .utils import flatten
 
-distances = {"hamming" : hamming,
-             "minkowski" : minkowski}
-
 class Prograph():
     """
     Class that handles a protein dataset. The graph is initialized by passing a csv
@@ -94,7 +91,7 @@ class Prograph():
         Any neighbour column calculated through either epsilon or kNN methods will have the values
         stored as tuples (neighbours,weights).
 
-    Written by Adam Mater, last revision 10.6.21
+    Written by Adam Mater, last revision 30.6.21
     """
     def __init__(self,file,
                       seed_seq=None,

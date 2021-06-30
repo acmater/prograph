@@ -13,8 +13,11 @@ from prograph import Prograph
 # Need to find a better way to do the test below
 
 class TestGenpgraph(unittest.TestCase):
-    def gen_pgraph(self):
+    def test_gen_pgraph(self):
         pgraph = Prograph(file="data/synthetic_data.csv")
+    def test_gen_pgraph_invalid(self):
+        with self.assertRaises(FileNotFoundError):
+            Prograph(file="None.pkl")
 
 pgraph = Prograph(file="data/synthetic_data.csv")
 
