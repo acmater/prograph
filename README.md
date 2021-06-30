@@ -52,6 +52,7 @@ The codebase is also integratable with networkx and scipy, enabling graph analyt
 ### Todo
 Major
 - Need to figure out how to build an extensible tokenization system so that it can integrate with methods like TAPE.
+- Make cKDTree the CPU bound alternative and also check its scaling.
 
 Minor
 - Add support for the generation of tensorflow data loaders (https://www.tensorflow.org/tutorials/load_data/csv)

@@ -15,6 +15,9 @@ from prograph import Prograph
 class TestGenpgraph(unittest.TestCase):
     def test_gen_pgraph(self):
         pgraph = Prograph(file="data/synthetic_data.csv")
+    def test_gen_pgraph_empty(self):
+        with self.assertRaises(TypeError):
+            Prograph()
     def test_gen_pgraph_invalid(self):
         with self.assertRaises(FileNotFoundError):
             Prograph(file="None.pkl")
